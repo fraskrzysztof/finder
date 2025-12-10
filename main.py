@@ -3,8 +3,11 @@ import cv2
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
     QHBoxLayout, QSlider, QTabWidget, QComboBox, QLineEdit, QSizePolicy,
-    QCheckBox
+    QCheckBox, QSplitter, QFrame
 )
+
+import numpy as np
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 
@@ -17,12 +20,15 @@ class DemoUI(QWidget):
         self.plotter = plotter()
         self.tracker = tracker()
 
-        self.setWindowTitle("Finder")
+        self.setWindowTitle("StarFinder")
         self.resize(1200, 800)
 
         # === ELEMENTY UI ===
 
-        self.label = QLabel("Witaj w prostym GUI!")
+        #tabs
+        self.tab1 = QTabWidget()
+
+        self.label = QLabel("StarFinder")
         self.label.setAlignment(Qt.AlignCenter)
 
         self.btn_ok = QPushButton("OK")
@@ -62,9 +68,13 @@ class DemoUI(QWidget):
         self.image_label.setAlignment(Qt.AlignCenter)
         #self.image_label.setStyleSheet("background-color: black;")
         self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        #clicking
         self.image_label.mousePressEvent = self.on_image_click
 
-
+        self.threshold_image = QLabel()
+        self.threshold_image.setAlignment(Qt.AlignCenter)
+        self.threshold_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Kamera i timer
         self.cap = cv2.VideoCapture(3)  # 0 to domyślna kamera
@@ -90,46 +100,174 @@ class DemoUI(QWidget):
         self.error_plot.setBackground((50, 50, 50))
 
         self.error_data = []  # lista do przechowywania wartości błędu
+        self.error_x_data = []
+        self.error_y_data = []
+        self.error_x = self.error_plot.plot(pen="r")
+        self.error_y = self.error_plot.plot(pen="g")
 
+    #     # === UKŁADY ===
 
-        # === UKŁADY ===
-        main_layout = QHBoxLayout()
-        interface_layout = QVBoxLayout()
+# 1. Lewy panel - sterowanie (z ramką)
+        # self.left_frame = QFrame()
+        # self.left_frame.setFrameStyle(QFrame.Box | QFrame.Sunken)
+        # self.left_frame.setLineWidth(4)
+       
+       
+        # left_layout = QVBoxLayout()
+        # left_layout.addWidget(self.label, stretch=0)
+        # left_layout.addWidget(self.input, stretch=0)
 
-        interface_layout.addWidget(self.label, stretch=0)
-        interface_layout.addWidget(self.input, stretch=0)
+        # btn_row = QHBoxLayout()
+        # btn_row.addWidget(self.btn_ok)
+        # btn_row.addWidget(self.btn_clear)
 
-        # guziki obok siebie
+        # left_layout.addLayout(btn_row, stretch=0)
+        # left_layout.addWidget(self.manual_check)
+        # left_layout.addWidget(self.mark_check)
+        # left_layout.addWidget(QLabel("brightness:"), stretch=0)
+        # left_layout.addWidget(self.slider1, stretch=0)
+        # left_layout.addWidget(QLabel("contrast:"), stretch=0)
+        # left_layout.addWidget(self.slider2, stretch=0)
+        # left_layout.addWidget(QLabel("saturation:"), stretch=0)
+        # left_layout.addWidget(self.slider3, stretch=0)
+        # left_layout.addWidget(QLabel("Lista rozwijana:"), stretch=0)
+        # left_layout.addWidget(self.combo, stretch=0)
+        # left_layout.addStretch()
+
+        # self.left_frame.setLayout(left_layout)
+        # 1. Lewy panel - sterowanie (z ramką)
+        self.left_frame = QFrame()
+        self.left_frame.setFrameStyle(QFrame.Box | QFrame.Sunken)
+        self.left_frame.setLineWidth(4)
+
+        left_layout = QVBoxLayout()
+
+        # ===============================================
+        #                 TABS
+        # ===============================================
+        self.tabs = QTabWidget()
+
+        # ---------------- TAB 1: USTAWIENIA ----------------
+        tab_general = QWidget()
+        tab_general_layout = QVBoxLayout()
+
+        tab_general_layout.addWidget(self.label)
+        tab_general_layout.addWidget(self.input)
+
         btn_row = QHBoxLayout()
         btn_row.addWidget(self.btn_ok)
         btn_row.addWidget(self.btn_clear)
-        interface_layout.addLayout(btn_row, stretch=0)
+        tab_general_layout.addLayout(btn_row)
 
-        interface_layout.addWidget(self.manual_check)
-        interface_layout.addWidget(self.mark_check)
+        tab_general_layout.addWidget(self.manual_check)
+        tab_general_layout.addWidget(self.mark_check)
 
-        interface_layout.addWidget(QLabel("brightness:"), stretch=0)
-        interface_layout.addWidget(self.slider1, stretch=0)
-        interface_layout.addWidget(QLabel("contrast:"), stretch=0)
-        interface_layout.addWidget(self.slider2, stretch=0)
-        interface_layout.addWidget(QLabel("saturation:"), stretch=0)
-        interface_layout.addWidget(self.slider3, stretch=0)
-
-        interface_layout.addWidget(QLabel("Lista rozwijana:"), stretch=0)
-        interface_layout.addWidget(self.combo, stretch=0)
-        interface_layout.addStretch()
-
-        image_layout = QVBoxLayout()
-
-        image_layout.addWidget(QLabel("Podgląd kamery:"), stretch=0)
-        image_layout.addWidget(self.image_label, stretch=10)  # większość przestrzeni dla obrazu
-
-        image_layout.addWidget(self.error_plot, stretch=3)
+        tab_general_layout.addStretch()
+        tab_general.setLayout(tab_general_layout)
 
 
-        main_layout.addLayout(interface_layout,stretch=0)
-        main_layout.addLayout(image_layout,stretch=1)
+        # ---------------- TAB 2: KAMERA ----------------
+        tab_camera = QWidget()
+        tab_camera_layout = QVBoxLayout()
+
+        tab_camera_layout.addWidget(QLabel("Brightness"))
+        tab_camera_layout.addWidget(self.slider1)
+
+        tab_camera_layout.addWidget(QLabel("Contrast"))
+        tab_camera_layout.addWidget(self.slider2)
+
+        tab_camera_layout.addWidget(QLabel("Saturation"))
+        tab_camera_layout.addWidget(self.slider3)
+
+        tab_camera_layout.addWidget(QLabel("Rozdzielczość"))
+        tab_camera_layout.addWidget(self.combo)
+
+        tab_camera_layout.addStretch()
+        tab_camera.setLayout(tab_camera_layout)
+
+
+        # ---------------- TAB 3: TRACKING ----------------
+        tab_tracking = QWidget()
+        tab_tracking_layout = QVBoxLayout()
+
+        tab_tracking_layout.addWidget(QLabel("Tracking:"))
+        tab_tracking_layout.addWidget(QLabel("Kliknij na obraz, aby wybrać gwiazdę"))
+
+        # tu później można dodać suwak ROI, opcje trackera itd.
+
+        tab_tracking_layout.addStretch()
+        tab_tracking.setLayout(tab_tracking_layout)
+
+
+        # Dodanie zakładek do widgetu tabs
+        self.tabs.addTab(tab_general, "Ustawienia")
+        self.tabs.addTab(tab_camera, "Kamera")
+        self.tabs.addTab(tab_tracking, "Tracking")
+
+
+        # Dodanie QTabWidget do lewego layoutu
+        left_layout.addWidget(self.tabs)
+        left_layout.addStretch()
+
+        self.left_frame.setLayout(left_layout)
+
+
+        # 2. Prawy panel - obraz i wykresy (z ramką)
+        self.right_frame = QFrame()
+        self.right_frame.setFrameStyle(QFrame.Box | QFrame.Sunken)
+        self.right_frame.setLineWidth(4)
+      
+        right_layout = QVBoxLayout()
+
+
+        self.camera_frame = QFrame()
+        self.camera_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        self.camera_frame.setLineWidth(2)
+        camera_layout = QVBoxLayout()
+        camera_layout.addWidget(self.image_label, stretch=10)
+        self.camera_frame.setLayout(camera_layout)
+
+        right_layout.addWidget(self.camera_frame, stretch=7)
+
+        self.bottom_frame = QFrame()
+        self.bottom_frame.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.bottom_frame.setLineWidth(2)
+
+        bottom_layout = QHBoxLayout()
+
+        # Ramka na wykres
+        self.plot_frame = QFrame()
+        self.plot_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        self.plot_frame.setLineWidth(2)
+        plot_layout = QVBoxLayout()
+        plot_layout.addWidget(self.error_plot)
+        self.plot_frame.setLayout(plot_layout)
+
+        # Ramka na obraz threshold
+        self.threshold_frame = QFrame()
+        self.threshold_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        self.threshold_frame.setLineWidth(2)
+        threshold_layout = QVBoxLayout()
+        threshold_layout.addWidget(self.threshold_image)
+        self.threshold_frame.setLayout(threshold_layout)
+
+        # Dodanie obu ramek do głównego bottom_layout
+        bottom_layout.addWidget(self.plot_frame, stretch=3)
+        bottom_layout.addWidget(self.threshold_frame, stretch=1)
+
+        self.bottom_frame.setLayout(bottom_layout)
+
+        right_layout.addWidget(self.bottom_frame, stretch=3)
+
+        self.right_frame.setLayout(right_layout)
+
+        # 3. Główny layout z dwoma ramkami obok siebie
+        main_layout = QHBoxLayout()
+        main_layout.addWidget(self.left_frame, stretch=1)
+        main_layout.addWidget(self.right_frame, stretch=4)
         self.setLayout(main_layout)
+
+
 
         # === SYGNAŁY ===
         self.btn_ok.clicked.connect(self.on_ok)
@@ -229,7 +367,7 @@ class DemoUI(QWidget):
             self.target_pos = centroid
 
         frame = self.overlay.apply_overlay(frame, centroid, self.roi_size, center_mark_enabled=self.mark_check.isChecked())
-        self.plotter.plotter(frame, self.target_pos, centroid, self.error_data, self.error_plot)
+        self.plotter.plotter(frame, self.target_pos, centroid, self.error_data, self.error_x_data, self.error_y_data, self.error_x, self.error_y)
 
 
         # --- KONWERSJA NA QPIXMAP I WYŚWIETLENIE ---
@@ -246,6 +384,29 @@ class DemoUI(QWidget):
                 Qt.SmoothTransformation
             )
         )
+
+        if self.tracker.last_threshold is not None:
+            th = self.tracker.last_threshold
+
+            th_rgb = cv2.cvtColor(th, cv2. COLOR_GRAY2RGB)
+            th_rgb = np.ascontiguousarray(th_rgb)
+            rh, rw, _ = th_rgb.shape
+            bytes_per_line = 3 * rw
+            qimg_roi = QImage(th_rgb.data, rw, rh, bytes_per_line, QImage.Format_RGB888)
+            qimg_roi = qimg_roi.copy()
+            pix = QPixmap.fromImage(qimg_roi)
+
+            self.threshold_image.setPixmap(
+                pix.scaled(
+                    self.threshold_image.width(),
+                    self.threshold_image.height(),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+            )
+        else:
+            self.threshold_image.setText("brak ROI")
+            self.threshold_image.setPixmap(QPixmap())
 
 class OverlayRenderer:
     def __init__(self):
@@ -315,6 +476,7 @@ class tracker:
     def  __init__(self):
         pass
     
+        self.last_threshold = None
     
     def track_in_roi(self, frame, gray, tracking_enabled, target_pos, roi_size):
         if not tracking_enabled or target_pos is None:
@@ -333,7 +495,7 @@ class tracker:
 
         
         _, th = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
+        self.last_threshold = th
         
         cnts, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -367,19 +529,27 @@ class tracker:
 class plotter:
     def __init__(self):
         pass
+
     
-    def plotter(self, frame, target_pos, centroid, error_data, error_plot):
+    def plotter(self, frame, target_pos, centroid, error_data, error_x_data, error_y_data, curve_x, curve_y):
         if target_pos is not None and centroid is not None:
             tx, ty = target_pos
             cx, cy = centroid
             h, w, _ = frame.shape
             error = ((cx - w//2)**2 + (cy - h//2)**2)**0.5
+            error_x = cx - w//2
+            error_y = h//2 - cy
             error_data.append(error)
+            error_x_data.append(error_x)
+            error_y_data.append(error_y)
 
-            if len(error_data) > 1000:
+            if len(error_data) > 100:
                 error_data.pop(0)
+                error_y_data.pop(0)
+                error_x_data.pop(0)
 
-            error_plot.plot(error_data, clear=True, pen='r')
+            curve_x.setData(error_x_data)
+            curve_y.setData(error_y_data)
 
 
 
