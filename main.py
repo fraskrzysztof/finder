@@ -2,7 +2,7 @@ import sys
 import cv2
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
-    QHBoxLayout, QSlider, QListWidget, QComboBox, QLineEdit, QSizePolicy,
+    QHBoxLayout, QSlider, QTabWidget, QComboBox, QLineEdit, QSizePolicy,
     QCheckBox
 )
 from PySide6.QtCore import Qt, QTimer
@@ -222,8 +222,11 @@ class DemoUI(QWidget):
 
         # --- TRACKING (punkt 4) ---
         gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)  # osobna kopia grayscale
-        centroid = self.tracker.track_in_roi(frame, gray, self.tracking_enabled, self.target_pos, self.roi_size)              # None albo (cx,cy)
 
+
+        centroid = self.tracker.track_in_roi(frame, gray, self.tracking_enabled, self.target_pos, self.roi_size)              # None albo (cx,cy)
+        if centroid is not None:
+            self.target_pos = centroid
 
         frame = self.overlay.apply_overlay(frame, centroid, self.roi_size, center_mark_enabled=self.mark_check.isChecked())
         self.plotter.plotter(frame, self.target_pos, centroid, self.error_data, self.error_plot)
@@ -328,10 +331,10 @@ class tracker:
 
         roi = gray[y1:y2, x1:x2]
 
-        # progowanie (możesz zmienić próg ręcznie albo adaptacyjne)
+        
         _, th = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-        # kontury w ROI
+        
         cnts, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if not cnts:
@@ -358,10 +361,6 @@ class tracker:
             if d < best_dist:
                 best_dist = d
                 best = (gx, gy)
-
-        # zaktualizuj pozycję celu
-        if best:
-            target_pos = best
 
         return best
 
