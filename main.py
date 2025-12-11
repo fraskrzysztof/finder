@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
 )
 
 import numpy as np
+import serial
+import serial.tools.list_ports
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
@@ -19,6 +21,7 @@ class DemoUI(QWidget):
         self.overlay = OverlayRenderer()
         self.plotter = plotter()
         self.tracker = tracker()
+        self.serialMenager = serialMenager()
 
         self.setWindowTitle("StarFinder")
         self.resize(1200, 800)
@@ -161,6 +164,18 @@ class DemoUI(QWidget):
 
 
 
+        self.serial_combo = QComboBox()
+        self.serial_combo.clear()
+        self.serial_combo.addItems(["select port"])
+
+        self.baudrate = QLineEdit()
+        self.baudrate.setPlaceholderText("115200")
+        ports = self.serialMenager.detect_serial_ports()
+        for device, desc in ports:
+            self.serial_combo.addItem(f"{device}  ({desc})", device)
+
+
+
     #     # === UKŁADY ===
 
         # 1. Lewy panel - sterowanie (z ramką)
@@ -243,9 +258,29 @@ class DemoUI(QWidget):
         self.tabs.addTab(tab_tracking, "Tracking")
 
 
+
+        self.com_frame = QFrame()
+        self.com_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
+        self.com_frame.setLineWidth(2)
+
+        self.com_tabs = QTabWidget()
+        com_tab = QWidget()
+        com_tab_layout = QVBoxLayout()
+        com_tab_layout.addWidget(QLabel("Select port:"))
+        com_tab_layout.addWidget(self.serial_combo)
+        com_tab_layout.addWidget(QLabel("baudrate:"))
+        com_tab_layout.addWidget(self.baudrate)
+        com_tab_layout.addStretch()
+        com_tab.setLayout(com_tab_layout)
+        self.com_tabs.addTab(com_tab, "com tab")
+
+
         # Dodanie QTabWidget do lewego layoutu
         left_layout.addWidget(self.tabs)
-        left_layout.addStretch()
+        left_layout.addWidget(self.com_tabs)
+        #left_layout.addStretch()
+
+        
 
         self.left_frame.setLayout(left_layout)
 
@@ -317,13 +352,13 @@ class DemoUI(QWidget):
         self.roi_slider.valueChanged.connect(self.change_roi)
 
     # === OBSŁUGA ZDARZEŃ ===
+
+
     def on_apply(self):
         self.focal = int(self.focal_length.text())
         self.pixel_s = float(self.pixel_size.text())
 
         self.arcsec = 206.265*(self.pixel_s/self.focal)
-
-
 
 
     def on_slider_change(self, value):
@@ -648,7 +683,61 @@ class plotter:
             curve_x.setData(error_x_data)
             curve_y.setData(error_y_data)
 
+class serialMenager:
+    def __init__(self):
+        
+        self.ser = None
 
+
+    def detect_serial_ports(self):
+
+        ports = serial.tools.list_ports.comports()
+        available = []
+
+        accepted_keywords = [
+            "USB", "UART", "ACM", "CH340", "CH910",
+            "CP210", "FTDI", "FT232", "Arduino",
+            "STM", "ESP", "Silicon Labs"
+        ]
+
+        for port in ports:
+            desc = port.description.upper()
+            if any(keyword in desc for keyword in accepted_keywords):
+                available.append((port.device, port.description))
+
+        return available
+
+    def open_serial_port(self, port, brate=115200):
+        self.close()
+       
+        try:
+            self.ser = serial.Serial(port, baudrate = brate, timeout = 1)
+            return True 
+        except Exception as e:
+            print(f"[SerialManager] Error opening port: {e}")
+            self.ser = None
+            return False
+        
+
+    def close_serial_port(self):
+        if self.ser and not self.ser.is_open:
+            try:
+                self.ser.close()
+            except Exception as e:
+                print(f"[SerialMenager] Error closing port: {e}")
+        self.ser = None
+
+    def serial_send(self, data):
+        if not self.ser or not self.ser.is_open:
+            return False
+        
+        try:
+            data = str(data).encode()
+            self.ser.write(data)
+            return True
+        except Exception as e:
+            print(f"[SerialMenager] Error sending data: {e}")
+            return False
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
