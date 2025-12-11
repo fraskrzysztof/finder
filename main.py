@@ -75,19 +75,32 @@ class DemoUI(QWidget):
         
         ####CAMERA SETTINGS TAB
         self.slider1 = QSlider(Qt.Horizontal)
-        self.slider1.setRange(0, 255)
+        self.slider1.setRange(0, 2000)
         self.slider1.setValue(50)
-        self.slider1.valueChanged.connect(self.change_brightness)
+        self.slider1.valueChanged.connect(self.change_exposure)
+        self.exposure_val = 50
+        self.exposure_label = QLabel(f"exposure: {self.exposure_val}")
+
+        self.slider4 = QSlider(Qt.Horizontal)
+        self.slider4.setRange(-127/2, 127/2)
+        self.slider4.setValue(0)
+        self.slider4.valueChanged.connect(self.change_brightness)
+        self.brightness_val = 50
+        self.brightness_label = QLabel(f"brightness: {self.brightness_val}")
 
         self.slider2 = QSlider(Qt.Horizontal)
-        self.slider2.setRange(0, 255)
-        self.slider2.setValue(50)
+        self.slider2.setRange(0, 50)
+        self.slider2.setValue(25)
         self.slider2.valueChanged.connect(self.change_contrast)
+        self.contrast_val = 50
+        self.contrast_label = QLabel(f"contrast: {self.contrast_val}")
 
         self.slider3 = QSlider(Qt.Horizontal)
-        self.slider3.setRange(0, 255)
+        self.slider3.setRange(0, 127)
         self.slider3.setValue(50)
         self.slider3.valueChanged.connect(self.change_saturation)
+        self.saturation_val = 50
+        self.saturation_label = QLabel(f"saturation: {self.saturation_val}")
         
         self.combo = QComboBox()
         self.combo.addItems(["choose resolution","1920x1080", "1280x720", "640x480"])
@@ -189,13 +202,16 @@ class DemoUI(QWidget):
         tab_camera_layout.addWidget(QLabel("camera:"))
         tab_camera_layout.addWidget(self.camera_combo)
 
-        tab_camera_layout.addWidget(QLabel("Brightness"))
+        tab_camera_layout.addWidget(self.exposure_label)
         tab_camera_layout.addWidget(self.slider1)
 
-        tab_camera_layout.addWidget(QLabel("Contrast"))
+        tab_camera_layout.addWidget(self.brightness_label)
+        tab_camera_layout.addWidget(self.slider4)
+
+        tab_camera_layout.addWidget(self.contrast_label)
         tab_camera_layout.addWidget(self.slider2)
 
-        tab_camera_layout.addWidget(QLabel("Saturation"))
+        tab_camera_layout.addWidget(self.saturation_label)
         tab_camera_layout.addWidget(self.slider3)
 
         tab_camera_layout.addStretch()
@@ -222,8 +238,8 @@ class DemoUI(QWidget):
 
 
         # Dodanie zakładek do widgetu tabs
-        self.tabs.addTab(tab_general, "Ustawienia")
-        self.tabs.addTab(tab_camera, "Kamera")
+        self.tabs.addTab(tab_general, "Settings")
+        self.tabs.addTab(tab_camera, "Camera")
         self.tabs.addTab(tab_tracking, "Tracking")
 
 
@@ -315,19 +331,30 @@ class DemoUI(QWidget):
     def change_roi(self, value):
         self.roi_size = value 
         self.roi_label.setText(f"roi size: {self.roi_size}")  # Aktualizuj etykietę
+
+        self.roi_label.setText(f"roi size: {self.roi_size}")  # Aktualizuj etykietę
         
     #WYLACZYC TRYBY AUTO KAMERY
+    def change_exposure(self, value):
+        v = value 
+        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # wyłącz auto
+        self.cap.set(cv2.CAP_PROP_EXPOSURE, v) 
+        self.exposure_label.setText(f"exposure: {v}")  # Aktualizuj etykietę 
+
     def change_brightness(self, value):
         v = value 
         self.cap.set(cv2.CAP_PROP_BRIGHTNESS, v)
+        self.brightness_label.setText(f"brightness: {v}")  # Aktualizuj etykietę 
 
     def change_contrast(self, value):
         v = value 
         self.cap.set(cv2.CAP_PROP_CONTRAST, v)
+        self.contrast_label.setText(f"contrast: {v}")  # Aktualizuj etykietę
 
     def change_saturation(self, value):
         v = value 
         self.cap.set(cv2.CAP_PROP_SATURATION, v)
+        self.saturation_label.setText(f"saturation: {v}")  # Aktualizuj etykietę
 
     def on_combo_change(self, text):
         pass
