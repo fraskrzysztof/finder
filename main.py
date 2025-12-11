@@ -28,14 +28,52 @@ class DemoUI(QWidget):
         #tabs
         self.tab1 = QTabWidget()
 
-        self.label = QLabel("StarFinder")
-        self.label.setAlignment(Qt.AlignCenter)
 
-        self.btn_ok = QPushButton("OK")
-        self.btn_clear = QPushButton("Wyczyść")
+        ####TRACKER TAB
+
+        self.tracking_enabled = False
+        self.roi_size = 200  # wielkość ROI (px)
+        self.target_pos = None  # (x, y) klikniętej gwiazdy
+        self.focal = 190
+        self.pixel_s = 2.9
+        self.arcsec = 206.265*(self.pixel_s/self.focal)
+
+        self.btn_apply = QPushButton("apply")
+        self.roi_input = QLineEdit()
+        self.roi_input.setPlaceholderText("set ROI size")
+
+
+        self.roi_label = QLabel(f"roi size: {self.roi_size}")
+
+        self.roi_slider = QSlider(Qt.Horizontal)
+        self.roi_slider.setRange(50, 400)
+        self.roi_slider.setValue(200)
+        self.roi_slider.valueChanged.connect(self.change_roi)
+
+
+        self.pixel_size = QLineEdit()
+        self.pixel_size.setPlaceholderText("set pixel size")
+
+        self.focal_length = QLineEdit()
+        self.focal_length.setPlaceholderText("set focal length")
+
+        self.error_plot = pg.PlotWidget()
+        self.error_plot.setTitle("tracking error")
+        self.error_plot.setLabel("left", "[degrees]")
+        self.error_plot.setLabel("bottom", "[frame]")
+        self.error_plot.showGrid(x=True, y=True)
+        self.error_plot.setBackground((40, 40, 40))
+        self.error_plot.addLegend(pen= 'w')  # <-- dodaje legendę
+        self.error_plot.getAxis('left').enableAutoSIPrefix(False)
+
+        self.error_data = []  # lista do przechowywania wartości błędu
+        self.error_x_data = []
+        self.error_y_data = []
+        self.error_x = self.error_plot.plot(pen="r", name='x')
+        self.error_y = self.error_plot.plot(pen="g", name='y')
 
         
-
+        ####CAMERA SETTINGS TAB
         self.slider1 = QSlider(Qt.Horizontal)
         self.slider1.setRange(0, 255)
         self.slider1.setValue(50)
@@ -52,16 +90,37 @@ class DemoUI(QWidget):
         self.slider3.valueChanged.connect(self.change_saturation)
         
         self.combo = QComboBox()
-        self.combo.addItems(["640x480", "1280x720", "Opcja C"])
+        self.combo.addItems(["choose resolution","1920x1080", "1280x720", "640x480"])
 
+        self.camera_combo = QComboBox()
+        self.camera_combo.addItems(["choose camera"])
+
+        def detect_cameras(max_devices=5):
+            available = []
+            for i in range(max_devices):
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened():
+                    available.append(i)
+                    cap.release()
+            return available
+        
+        cameras = detect_cameras(5)
+        for cam in cameras:
+            self.camera_combo.addItem(f"camera {cam}", cam)
+
+
+
+        ####MAIN SETTINGS TAB
         self.manual_check = QCheckBox("manual")
         self.manual_check.setChecked(False)
 
         self.mark_check = QCheckBox("cross")
         self.mark_check.setChecked(True)
 
-        self.input = QLineEdit()
-        self.input.setPlaceholderText("Wpisz coś...")
+        self.roi_box_check = QCheckBox("ROI box")
+        self.roi_box_check.setChecked(True)
+
+
 
         # Label do wyświetlania obrazu z kamery
         self.image_label = QLabel()
@@ -77,7 +136,7 @@ class DemoUI(QWidget):
         self.threshold_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Kamera i timer
-        self.cap = cv2.VideoCapture(3)  # 0 to domyślna kamera
+        self.cap = cv2.VideoCapture(2)  # 0 to domyślna kamera
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
@@ -87,56 +146,13 @@ class DemoUI(QWidget):
         self.timer.start(1000/60)  
 
 
-        # --- Tracking ---
-        self.tracking_enabled = False
-        self.roi_size = 200  # wielkość ROI (px)
-        self.target_pos = None  # (x, y) klikniętej gwiazdy
 
-        self.error_plot = pg.PlotWidget()
-        self.error_plot.setTitle("Błąd śledzenia")
-        self.error_plot.setLabel("left", "Błąd (px)")
-        self.error_plot.setLabel("bottom", "Klatka")
-        self.error_plot.showGrid(x=True, y=True)
-        self.error_plot.setBackground((50, 50, 50))
-
-        self.error_data = []  # lista do przechowywania wartości błędu
-        self.error_x_data = []
-        self.error_y_data = []
-        self.error_x = self.error_plot.plot(pen="r")
-        self.error_y = self.error_plot.plot(pen="g")
 
     #     # === UKŁADY ===
 
-# 1. Lewy panel - sterowanie (z ramką)
-        # self.left_frame = QFrame()
-        # self.left_frame.setFrameStyle(QFrame.Box | QFrame.Sunken)
-        # self.left_frame.setLineWidth(4)
-       
-       
-        # left_layout = QVBoxLayout()
-        # left_layout.addWidget(self.label, stretch=0)
-        # left_layout.addWidget(self.input, stretch=0)
-
-        # btn_row = QHBoxLayout()
-        # btn_row.addWidget(self.btn_ok)
-        # btn_row.addWidget(self.btn_clear)
-
-        # left_layout.addLayout(btn_row, stretch=0)
-        # left_layout.addWidget(self.manual_check)
-        # left_layout.addWidget(self.mark_check)
-        # left_layout.addWidget(QLabel("brightness:"), stretch=0)
-        # left_layout.addWidget(self.slider1, stretch=0)
-        # left_layout.addWidget(QLabel("contrast:"), stretch=0)
-        # left_layout.addWidget(self.slider2, stretch=0)
-        # left_layout.addWidget(QLabel("saturation:"), stretch=0)
-        # left_layout.addWidget(self.slider3, stretch=0)
-        # left_layout.addWidget(QLabel("Lista rozwijana:"), stretch=0)
-        # left_layout.addWidget(self.combo, stretch=0)
-        # left_layout.addStretch()
-
-        # self.left_frame.setLayout(left_layout)
         # 1. Lewy panel - sterowanie (z ramką)
         self.left_frame = QFrame()
+        self.left_frame.setMinimumWidth(300)  # np. 300 px
         self.left_frame.setFrameStyle(QFrame.Box | QFrame.Sunken)
         self.left_frame.setLineWidth(4)
 
@@ -151,16 +167,11 @@ class DemoUI(QWidget):
         tab_general = QWidget()
         tab_general_layout = QVBoxLayout()
 
-        tab_general_layout.addWidget(self.label)
-        tab_general_layout.addWidget(self.input)
 
-        btn_row = QHBoxLayout()
-        btn_row.addWidget(self.btn_ok)
-        btn_row.addWidget(self.btn_clear)
-        tab_general_layout.addLayout(btn_row)
 
         tab_general_layout.addWidget(self.manual_check)
         tab_general_layout.addWidget(self.mark_check)
+        tab_general_layout.addWidget(self.roi_box_check)
 
         tab_general_layout.addStretch()
         tab_general.setLayout(tab_general_layout)
@@ -169,6 +180,14 @@ class DemoUI(QWidget):
         # ---------------- TAB 2: KAMERA ----------------
         tab_camera = QWidget()
         tab_camera_layout = QVBoxLayout()
+
+
+
+        tab_camera_layout.addWidget(QLabel("Resolution:"))
+        tab_camera_layout.addWidget(self.combo)
+
+        tab_camera_layout.addWidget(QLabel("camera:"))
+        tab_camera_layout.addWidget(self.camera_combo)
 
         tab_camera_layout.addWidget(QLabel("Brightness"))
         tab_camera_layout.addWidget(self.slider1)
@@ -179,9 +198,6 @@ class DemoUI(QWidget):
         tab_camera_layout.addWidget(QLabel("Saturation"))
         tab_camera_layout.addWidget(self.slider3)
 
-        tab_camera_layout.addWidget(QLabel("Rozdzielczość"))
-        tab_camera_layout.addWidget(self.combo)
-
         tab_camera_layout.addStretch()
         tab_camera.setLayout(tab_camera_layout)
 
@@ -189,11 +205,17 @@ class DemoUI(QWidget):
         # ---------------- TAB 3: TRACKING ----------------
         tab_tracking = QWidget()
         tab_tracking_layout = QVBoxLayout()
+        tab_tracking_layout.addWidget(QLabel("set region of interest size"))
 
-        tab_tracking_layout.addWidget(QLabel("Tracking:"))
-        tab_tracking_layout.addWidget(QLabel("Kliknij na obraz, aby wybrać gwiazdę"))
+        tab_tracking_layout.addWidget(self.roi_label)
+        tab_tracking_layout.addWidget(self.roi_slider)
 
+        tab_tracking_layout.addWidget(QLabel("Set pixel size [um]:"))
+        tab_tracking_layout.addWidget(self.pixel_size)
+        tab_tracking_layout.addWidget(QLabel("Set focal length [mm]:"))
+        tab_tracking_layout.addWidget(self.focal_length)
         # tu później można dodać suwak ROI, opcje trackera itd.
+        tab_tracking_layout.addWidget(self.btn_apply)
 
         tab_tracking_layout.addStretch()
         tab_tracking.setLayout(tab_tracking_layout)
@@ -270,25 +292,30 @@ class DemoUI(QWidget):
 
 
         # === SYGNAŁY ===
-        self.btn_ok.clicked.connect(self.on_ok)
-        self.btn_clear.clicked.connect(self.on_clear)
+        self.btn_apply.clicked.connect(self.on_apply)
         self.slider1.valueChanged.connect(self.on_slider_change)
         self.slider2.valueChanged.connect(self.on_slider_change)
         self.slider3.valueChanged.connect(self.on_slider_change)
-        self.combo.currentTextChanged.connect(self.on_combo_change)
-        self.manual_check.stateChanged.connect(self.manual_checkbox)
+        self.combo.currentTextChanged.connect(self.change_res)
+        self.camera_combo.currentIndexChanged.connect(self.change_camera)
+        self.roi_slider.valueChanged.connect(self.change_roi)
 
     # === OBSŁUGA ZDARZEŃ ===
-    def on_ok(self):
-        text = self.input.text()
-        self.label.setText(f"Naciśnięto OK: {text}")
+    def on_apply(self):
+        self.focal = int(self.focal_length.text())
+        self.pixel_s = float(self.pixel_size.text())
 
-    def on_clear(self):
-        self.input.clear()
-        self.label.setText("Wyczyszczono")
+        self.arcsec = 206.265*(self.pixel_s/self.focal)
+
+
+
 
     def on_slider_change(self, value):
-        self.label.setText(f"Suwak: {value}")
+        pass
+    def change_roi(self, value):
+        self.roi_size = value 
+        self.roi_label.setText(f"roi size: {self.roi_size}")  # Aktualizuj etykietę
+        
     #WYLACZYC TRYBY AUTO KAMERY
     def change_brightness(self, value):
         v = value 
@@ -303,14 +330,48 @@ class DemoUI(QWidget):
         self.cap.set(cv2.CAP_PROP_SATURATION, v)
 
     def on_combo_change(self, text):
-        self.label.setText(f"Wybrano: {text}")
+        pass
 
     def manual_checkbox(self, state):
-        if state == Qt.Checked:
-            print("asd")
-        else:
-            print("asdasd")
+        # print("state:", state)
+        # if state == 2:
+        #     self.cap.set(cv2.CAP_PROP_AUTO_WB, 0) 
+        #     self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 128) 
+        #     self.cap.set(cv2.CAP_PROP_CONTRAST, 128)
+        #     self.cap.set(cv2.CAP_PROP_SATURATION, 128)
+        #     self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
+        # else:
+        #     self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0) 
+        #     self.cap.set(cv2.CAP_PROP_CONTRAST, 0)
+        #     self.cap.set(cv2.CAP_PROP_SATURATION, 0)
+        #     self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
+        pass
+       
 
+    def change_res(self, text):
+        
+        w, h = map(int, text.split('x'))
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+       
+
+    def change_camera(self, index):
+        if index == 0:
+            return
+        
+        self.timer.stop()
+        
+        if self.cap:
+            self.cap.release()
+        
+        cam_index = self.camera_combo.currentData()
+        self.cap = cv2.VideoCapture(cam_index)
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        
+        QApplication.processEvents()
+        cv2.waitKey(50)
+        
+        self.timer.start(1000/30)
 
 
 
@@ -358,19 +419,25 @@ class DemoUI(QWidget):
         # zapis wymiarów dla trackera
         self.frame_h, self.frame_w, _ = frame.shape
 
-        # --- TRACKING (punkt 4) ---
+            # --- TRACKING (punkt 4) ---
         gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)  # osobna kopia grayscale
 
 
-        centroid = self.tracker.track_in_roi(frame, gray, self.tracking_enabled, self.target_pos, self.roi_size)              # None albo (cx,cy)
+        centroid = self.tracker.track_in_roi(frame, gray, self.tracking_enabled, 
+                                             self.target_pos, self.roi_size)             
         if centroid is not None:
             self.target_pos = centroid
 
-        frame = self.overlay.apply_overlay(frame, centroid, self.roi_size, center_mark_enabled=self.mark_check.isChecked())
-        self.plotter.plotter(frame, self.target_pos, centroid, self.error_data, self.error_x_data, self.error_y_data, self.error_x, self.error_y)
+        frame = self.overlay.apply_overlay(frame, centroid, self.roi_size, 
+                                           center_mark_enabled=self.mark_check.isChecked(), 
+                                           roi_mark_enabled=self.roi_box_check.isChecked())
+        
+        self.plotter.plotter(frame, self.target_pos, centroid,
+                            self.error_data, self.error_x_data, self.error_y_data, 
+                            self.error_x, self.error_y, self.arcsec)
 
 
-        # --- KONWERSJA NA QPIXMAP I WYŚWIETLENIE ---
+            # --- KONWERSJA NA QPIXMAP I WYŚWIETLENIE ---
         h, w, ch = frame.shape
         bytes_per_line = ch * w
         qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
@@ -443,8 +510,8 @@ class OverlayRenderer:
         cx, cy = w // 2, h // 2
 
         # gruby krzyż
-        cv2.line(frame, (cx - 20, cy), (cx + 20, cy), (120, 255, 0), 2)
-        cv2.line(frame, (cx, cy - 20), (cx, cy + 20), (120, 255, 0), 2)
+        cv2.line(frame, (cx - 20, cy), (cx + 20, cy), (120, 255, 0), 3)
+        cv2.line(frame, (cx, cy - 20), (cx, cy + 20), (120, 255, 0), 3)
 
         # cienkie pełne linie
         cv2.line(frame, (0, cy), (w, cy), (120, 255, 0), 1)
@@ -462,15 +529,18 @@ class OverlayRenderer:
         return frame
 
     
-    def apply_overlay(self, frame, centroid, roi_size, center_mark_enabled=True):
+    def apply_overlay(self, frame, centroid, roi_size, center_mark_enabled=True, roi_mark_enabled=True):
         frame = self.draw_tracking_marker(frame, centroid)
         frame = self.draw_error_line(frame, centroid)
-        frame = self.draw_roi_box(frame, centroid, roi_size)
     
         if center_mark_enabled:
             frame = self.draw_center_mark(frame)
-        
+            
+
+        if roi_mark_enabled:
+            frame = self.draw_roi_box(frame, centroid, roi_size)
         return frame
+
 
 class tracker:
     def  __init__(self):
@@ -531,7 +601,7 @@ class plotter:
         pass
 
     
-    def plotter(self, frame, target_pos, centroid, error_data, error_x_data, error_y_data, curve_x, curve_y):
+    def plotter(self, frame, target_pos, centroid, error_data, error_x_data, error_y_data, curve_x, curve_y, arcs):
         if target_pos is not None and centroid is not None:
             tx, ty = target_pos
             cx, cy = centroid
@@ -540,10 +610,10 @@ class plotter:
             error_x = cx - w//2
             error_y = h//2 - cy
             error_data.append(error)
-            error_x_data.append(error_x)
-            error_y_data.append(error_y)
+            error_x_data.append((error_x*arcs)/3600)
+            error_y_data.append((error_y*arcs)/3600)
 
-            if len(error_data) > 100:
+            if len(error_data) > 500:
                 error_data.pop(0)
                 error_y_data.pop(0)
                 error_x_data.pop(0)
@@ -558,3 +628,9 @@ if __name__ == "__main__":
     window = DemoUI()
     window.show()
     sys.exit(app.exec())
+
+
+
+
+
+## arcsec/pixel = 206.265*(pixel size (2.9um)/focal length)
