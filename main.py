@@ -514,7 +514,9 @@ class DemoUI(QWidget):
         self.plotter.plotter(frame, self.target_pos, centroid,
                             self.error_data, self.error_x_data, self.error_y_data, 
                             self.error_x, self.error_y, self.arcsec)
-
+        if centroid is not None:
+            e_x, e_y = self.tracker.error_calc(frame, centroid, self.arcsec)
+            self.serialMenager.serial_send(e_x, e_y)
 
             # --- KONWERSJA NA QPIXMAP I WYŚWIETLENIE ---
         h, w, ch = frame.shape
@@ -674,6 +676,16 @@ class tracker:
                 best = (gx, gy)
 
         return best
+    def error_calc(self, frame, centroid, arcs):
+        h, w, _ = frame.shape
+        cx, cy = centroid
+        error = ((cx - w//2)**2 + (cy - h//2)**2)**0.5
+        error_x = cx - w//2
+        error_y = h//2 - cy
+        error_x = (error_x*arcs)/3600
+        error_y = (error_y*arcs)/3600
+
+        return error_x, error_y
 
 class plotter:
     def __init__(self):
@@ -746,13 +758,16 @@ class serialMenager:
                 print(f"[SerialMenager] Error closing port: {e}")
         self.ser = None
 
-    def serial_send(self, data):
+    def serial_send(self, data_a, data_b, precision = 3):
         if not self.ser or not self.ser.is_open:
             return False
         
         try:
-            data = str(data).encode()
+            data = f"{data_a:.{precision}f} {data_b:.{precision}f}\n"
+            data = data.encode('utf-8')
             self.ser.write(data)
+            response = self.ser.readline().decode('utf-8').strip()
+            print("Odpowiedź z ESP32:", response)
             return True
         except Exception as e:
             print(f"[SerialMenager] Error sending data: {e}")
