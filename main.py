@@ -40,6 +40,8 @@ class DemoUI(QWidget):
         self.focal = 190
         self.pixel_s = 2.9
         self.arcsec = 206.265*(self.pixel_s/self.focal)
+        self.brate = 115200
+        self.port = None
 
         self.btn_apply = QPushButton("apply")
         self.roi_input = QLineEdit()
@@ -169,7 +171,7 @@ class DemoUI(QWidget):
         self.serial_combo.addItems(["select port"])
 
         self.baudrate = QLineEdit()
-        self.baudrate.setPlaceholderText("115200")
+        self.baudrate.setText("115200")
         ports = self.serialMenager.detect_serial_ports()
         for device, desc in ports:
             self.serial_combo.addItem(f"{device}  ({desc})", device)
@@ -257,7 +259,7 @@ class DemoUI(QWidget):
         self.tabs.addTab(tab_camera, "Camera")
         self.tabs.addTab(tab_tracking, "Tracking")
 
-
+        ####COM TAB 
 
         self.com_frame = QFrame()
         self.com_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
@@ -270,6 +272,12 @@ class DemoUI(QWidget):
         com_tab_layout.addWidget(self.serial_combo)
         com_tab_layout.addWidget(QLabel("baudrate:"))
         com_tab_layout.addWidget(self.baudrate)
+        com_buttons =QHBoxLayout()
+        self.btn_open = QPushButton("open")
+        self.btn_close = QPushButton("close")
+        com_buttons.addWidget(self.btn_open)
+        com_buttons.addWidget(self.btn_close)
+        com_tab_layout.addLayout(com_buttons)
         com_tab_layout.addStretch()
         com_tab.setLayout(com_tab_layout)
         self.com_tabs.addTab(com_tab, "com tab")
@@ -344,25 +352,36 @@ class DemoUI(QWidget):
 
         # === SYGNAŁY ===
         self.btn_apply.clicked.connect(self.on_apply)
-        self.slider1.valueChanged.connect(self.on_slider_change)
-        self.slider2.valueChanged.connect(self.on_slider_change)
-        self.slider3.valueChanged.connect(self.on_slider_change)
         self.combo.currentTextChanged.connect(self.change_res)
         self.camera_combo.currentIndexChanged.connect(self.change_camera)
         self.roi_slider.valueChanged.connect(self.change_roi)
+        self.serial_combo.currentTextChanged.connect(self.change_port)
+        self.btn_open.clicked.connect(self.on_open)
+        self.btn_close.clicked.connect(self.on_close)
 
     # === OBSŁUGA ZDARZEŃ ===
 
+    def change_port(self, text):
+        sel = self.serial_combo.currentData()
+        self.port = sel
+        print(self.port)
 
+    def baudrate_change(self, value):
+        self.brate = value
+        print(self.brate)
     def on_apply(self):
         self.focal = int(self.focal_length.text())
         self.pixel_s = float(self.pixel_size.text())
 
         self.arcsec = 206.265*(self.pixel_s/self.focal)
 
+    def on_open(self):
+        text = int(self.baudrate.text())
+        self.serialMenager.open_serial_port(self.port,text)
 
-    def on_slider_change(self, value):
-        pass
+    def on_close(self):
+        self.serialMenager.close_serial_port()
+        
     def change_roi(self, value):
         self.roi_size = value 
         self.roi_label.setText(f"roi size: {self.roi_size}")  # Aktualizuj etykietę
@@ -391,8 +410,6 @@ class DemoUI(QWidget):
         self.cap.set(cv2.CAP_PROP_SATURATION, v)
         self.saturation_label.setText(f"saturation: {v}")  # Aktualizuj etykietę
 
-    def on_combo_change(self, text):
-        pass
 
     def manual_checkbox(self, state):
         # print("state:", state)
@@ -708,10 +725,12 @@ class serialMenager:
         return available
 
     def open_serial_port(self, port, brate=115200):
-        self.close()
+        if self.ser is not None:
+            self.ser.close()
        
         try:
             self.ser = serial.Serial(port, baudrate = brate, timeout = 1)
+            print("port opened")
             return True 
         except Exception as e:
             print(f"[SerialManager] Error opening port: {e}")
