@@ -4,7 +4,7 @@ import time
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
     QHBoxLayout, QSlider, QTabWidget, QComboBox, QLineEdit, QSizePolicy,
-    QCheckBox, QSplitter, QFrame
+    QCheckBox, QFrame
 )
 
 import numpy as np
@@ -30,29 +30,27 @@ def detect_cameras():
 class DemoUI(QWidget):
     def __init__(self):
         super().__init__()
+
+        # ===================
+        # CLASS INIT
+        # ===================
+
         self.overlay = OverlayRenderer()
         self.plotter = plotter()
         self.tracker = tracker()
         self.serialMenager = serialMenager()
         self.cameraThread = cameraThread()
 
+        # ===================
+        # WINDOW SETTINGS
+        # ===================
+
         self.setWindowTitle("StarFinder")
         self.resize(1200, 800)
 
         # ===================
-        # LAYOUT INTERFACE
+        # VARIABLES/ FLAGS INIT
         # ===================
-
-
-
-
-        # === ELEMENTY UI ===
-
-        #tabs
-        self.tab1 = QTabWidget()
-
-
-        ####TRACKER TAB
 
         self.tracking_enabled = False
         self.roi_size = 200  # wielkość ROI (px)
@@ -64,14 +62,25 @@ class DemoUI(QWidget):
         self.port = None
         self.error_time = []
         self.start_time = time.time()  # punkt odniesienia
+        self.error_data = []  # lista do przechowywania wartości błędu
+        self.error_x_data = []
+        self.error_y_data = []
+
+        # ===========================================================
+        # ===================== INTERFACE ===========================
+        # ===========================================================
+
+
+        self.tab1 = QTabWidget()
+
+
+        ####TRACKER TAB
+
+        
+        
 
         self.btn_apply = QPushButton("apply")
-        self.roi_input = QLineEdit()
-        self.roi_input.setPlaceholderText("set ROI size")
-
-
         self.roi_label = QLabel(f"roi size: {self.roi_size}")
-
         self.roi_slider = QSlider(Qt.Horizontal)
         self.roi_slider.setRange(50, 400)
         self.roi_slider.setValue(200)
@@ -85,26 +94,7 @@ class DemoUI(QWidget):
         self.focal_length.setPlaceholderText("set focal length")
 
 
-        self.plot_timer = QTimer()
-        self.plot_timer.setInterval(100)  # 10 Hz
-        self.plot_timer.timeout.connect(self.update_error_plot)
-        self.plot_timer.start()
-        self.error_plot = pg.PlotWidget()
-        self.error_plot.setTitle("tracking error")
-        self.error_plot.setLabel("left", "ERROR [deg]")
-        self.error_plot.setLabel("bottom", "TIME[min]")
-        self.error_plot.showGrid(x=True, y=True)
-        self.error_plot.setBackground((40, 40, 40))
-        self.error_plot.addLegend(pen= 'w')  # <-- dodaje legendę
-        self.error_plot.getAxis('left').enableAutoSIPrefix(False)
 
-        self.error_data = []  # lista do przechowywania wartości błędu
-        self.error_x_data = []
-        self.error_y_data = []
-        self.error_x = self.error_plot.plot(pen="r", name='x')
-        self.error_y = self.error_plot.plot(pen="g", name='y')
-
-        
         ####CAMERA SETTINGS TAB
         self.slider1 = QSlider(Qt.Horizontal)
         self.slider1.setRange(0, 2000)
@@ -146,7 +136,6 @@ class DemoUI(QWidget):
             self.camera_combo.addItem(f"camera {cam}", cam)
 
 
-
         ####MAIN SETTINGS TAB
         self.manual_check = QCheckBox("manual")
         self.manual_check.setChecked(False)
@@ -158,38 +147,7 @@ class DemoUI(QWidget):
         self.roi_box_check.setChecked(True)
 
 
-
-        # Label do wyświetlania obrazu z kamery
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        #self.image_label.setStyleSheet("background-color: black;")
-        self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        #clicking
-        self.image_label.mousePressEvent = self.on_image_click
-
-        self.threshold_image = QLabel()
-        self.threshold_image.setAlignment(Qt.AlignCenter)
-        self.threshold_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        # # Kamera i timer
-        # self.cap = cv2.VideoCapture(2)  # 0 to domyślna kamera
-        # self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-        
-        self.camera_thread = QThread()
-        
-
-        self.cameraThread.moveToThread(self.camera_thread)
-
-        self.camera_thread.started.connect(self.cameraThread.run)
-        self.cameraThread.frame_ready.connect(self.on_new_frame)
-
-        self.camera_thread.start()
-
-
-
+        ####COM TAB
 
         self.serial_combo = QComboBox()
         self.serial_combo.clear()
@@ -201,11 +159,10 @@ class DemoUI(QWidget):
         for device, desc in ports:
             self.serial_combo.addItem(f"{device}  ({desc})", device)
 
-
-
-    #     # === UKŁADY ===
-
-        # 1. Lewy panel - sterowanie (z ramką)
+        # ==========
+        # left frame layouts
+        # ==========
+        
         self.left_frame = QFrame()
         self.left_frame.setMinimumWidth(300)  # np. 300 px
         self.left_frame.setFrameStyle(QFrame.Box | QFrame.Sunken)
@@ -213,24 +170,17 @@ class DemoUI(QWidget):
 
         left_layout = QVBoxLayout()
 
-        # ===============================================
-        #                 TABS
-        # ===============================================
         self.tabs = QTabWidget()
 
         # ---------------- TAB 1: USTAWIENIA ----------------
+
         tab_general = QWidget()
         tab_general_layout = QVBoxLayout()
-
-
-
         tab_general_layout.addWidget(self.manual_check)
         tab_general_layout.addWidget(self.mark_check)
         tab_general_layout.addWidget(self.roi_box_check)
-
         tab_general_layout.addStretch()
         tab_general.setLayout(tab_general_layout)
-
 
         # ---------------- TAB 2: KAMERA ----------------
         tab_camera = QWidget()
@@ -270,14 +220,11 @@ class DemoUI(QWidget):
         tab_tracking_layout.addWidget(self.pixel_size)
         tab_tracking_layout.addWidget(QLabel("Set focal length [mm]:"))
         tab_tracking_layout.addWidget(self.focal_length)
-        # tu później można dodać suwak ROI, opcje trackera itd.
         tab_tracking_layout.addWidget(self.btn_apply)
 
         tab_tracking_layout.addStretch()
         tab_tracking.setLayout(tab_tracking_layout)
 
-
-        # Dodanie zakładek do widgetu tabs
         self.tabs.addTab(tab_general, "Settings")
         self.tabs.addTab(tab_camera, "Camera")
         self.tabs.addTab(tab_tracking, "Tracking")
@@ -305,24 +252,70 @@ class DemoUI(QWidget):
         com_tab.setLayout(com_tab_layout)
         self.com_tabs.addTab(com_tab, "com tab")
 
-
-        # Dodanie QTabWidget do lewego layoutu
         left_layout.addWidget(self.tabs)
         left_layout.addWidget(self.com_tabs)
-        #left_layout.addStretch()
-
-        
 
         self.left_frame.setLayout(left_layout)
 
+        # =========================================================================
+        # ================================== VISUALS ==============================
+        # =========================================================================
 
-        # 2. Prawy panel - obraz i wykresy (z ramką)
+        #### PLOT INIT
+        self.plot_timer = QTimer()
+        self.plot_timer.setInterval(100)  # 10 Hz
+        self.plot_timer.timeout.connect(self.update_error_plot)
+        self.plot_timer.start()
+        self.error_plot = pg.PlotWidget()
+        self.error_plot.setTitle("tracking error")
+        self.error_plot.setLabel("left", "ERROR [deg]")
+        self.error_plot.setLabel("bottom", "TIME[min]")
+        self.error_plot.showGrid(x=True, y=True)
+        self.error_plot.setBackground((40, 40, 40))
+        self.error_plot.addLegend(pen= 'w')  # <-- dodaje legendę
+        self.error_plot.getAxis('left').enableAutoSIPrefix(False)
+
+        self.error_x = self.error_plot.plot(pen="r", name='x')
+        self.error_y = self.error_plot.plot(pen="g", name='y')
+
+        
+        #### CAMERA LABEL
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setStyleSheet("background-color: black;")
+        self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        ##### CLICKING
+
+        self.image_label.mousePressEvent = self.on_image_click
+
+        #### THRESHOLD
+
+        self.threshold_image = QLabel()
+        self.threshold_image.setAlignment(Qt.AlignCenter)
+        self.threshold_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        #### THREADING
+
+        self.camera_thread = QThread()
+        self.cameraThread.moveToThread(self.camera_thread)
+        self.camera_thread.started.connect(self.cameraThread.run)
+        self.cameraThread.frame_ready.connect(self.on_new_frame)
+        self.camera_thread.start()
+
+        # ==========
+        # visuals frame layout
+        # ==========
+
+        #### RIGHT FRAME
+
         self.right_frame = QFrame()
         self.right_frame.setFrameStyle(QFrame.Box | QFrame.Sunken)
         self.right_frame.setLineWidth(4)
       
         right_layout = QVBoxLayout()
 
+        #### CAMERA FRAME
 
         self.camera_frame = QFrame()
         self.camera_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
@@ -331,7 +324,9 @@ class DemoUI(QWidget):
         camera_layout.addWidget(self.image_label, stretch=10)
         self.camera_frame.setLayout(camera_layout)
 
-        right_layout.addWidget(self.camera_frame, stretch=7)
+        right_layout.addWidget(self.camera_frame, stretch=7) #<-------------- CAMERA STRETCH
+
+        #### BOTTOM FRAME
 
         self.bottom_frame = QFrame()
         self.bottom_frame.setFrameStyle(QFrame.Panel | QFrame.Sunken)
@@ -339,7 +334,8 @@ class DemoUI(QWidget):
 
         bottom_layout = QHBoxLayout()
 
-        # Ramka na wykres
+        #### PLOT FRAME
+
         self.plot_frame = QFrame()
         self.plot_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
         self.plot_frame.setLineWidth(2)
@@ -347,7 +343,8 @@ class DemoUI(QWidget):
         plot_layout.addWidget(self.error_plot)
         self.plot_frame.setLayout(plot_layout)
 
-        # Ramka na obraz threshold
+        #### THRESHOLD FRAME
+
         self.threshold_frame = QFrame()
         self.threshold_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
         self.threshold_frame.setLineWidth(2)
@@ -355,25 +352,24 @@ class DemoUI(QWidget):
         threshold_layout.addWidget(self.threshold_image)
         self.threshold_frame.setLayout(threshold_layout)
 
-        # Dodanie obu ramek do głównego bottom_layout
+        #### FRAMES TO BOTTOM LAYOUT
+
         bottom_layout.addWidget(self.plot_frame, stretch=3)
         bottom_layout.addWidget(self.threshold_frame, stretch=1)
-
         self.bottom_frame.setLayout(bottom_layout)
 
         right_layout.addWidget(self.bottom_frame, stretch=3)
-
         self.right_frame.setLayout(right_layout)
 
-        # 3. Główny layout z dwoma ramkami obok siebie
+        #### MAIN LAYOUT
+
         main_layout = QHBoxLayout()
         main_layout.addWidget(self.left_frame, stretch=1)
         main_layout.addWidget(self.right_frame, stretch=4)
         self.setLayout(main_layout)
 
 
-
-        # === SYGNAŁY ===
+        # ===  ===
         self.btn_apply.clicked.connect(self.on_apply)
         self.combo.currentTextChanged.connect(self.change_res)
         self.camera_combo.currentIndexChanged.connect(self.change_camera)
@@ -382,7 +378,7 @@ class DemoUI(QWidget):
         self.btn_open.clicked.connect(self.on_open)
         self.btn_close.clicked.connect(self.on_close)
 
-    # === OBSŁUGA ZDARZEŃ ===
+    # ===  ===
 
     def update_error_plot(self):
         if not self.error_time:
@@ -418,46 +414,32 @@ class DemoUI(QWidget):
         
     def change_roi(self, value):
         self.roi_size = value 
-        self.roi_label.setText(f"roi size: {self.roi_size}")  # Aktualizuj etykietę
+        self.roi_label.setText(f"roi size: {self.roi_size}")  
 
-        self.roi_label.setText(f"roi size: {self.roi_size}")  # Aktualizuj etykietę
+        self.roi_label.setText(f"roi size: {self.roi_size}")  
         
-    #WYLACZYC TRYBY AUTO KAMERY
     def change_exposure(self, value):
         v = value 
-        self.cameraThread.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # wyłącz auto
+        self.cameraThread.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  
         self.cameraThread.cap.set(cv2.CAP_PROP_EXPOSURE, v) 
-        self.exposure_label.setText(f"exposure: {v}")  # Aktualizuj etykietę 
+        self.exposure_label.setText(f"exposure: {v}")  
 
     def change_brightness(self, value):
         v = value 
         self.cameraThread.cap.set(cv2.CAP_PROP_BRIGHTNESS, v)
-        self.brightness_label.setText(f"brightness: {v}")  # Aktualizuj etykietę 
+        self.brightness_label.setText(f"brightness: {v}")   
 
     def change_contrast(self, value):
         v = value 
         self.cameraThread.cap.set(cv2.CAP_PROP_CONTRAST, v)
-        self.contrast_label.setText(f"contrast: {v}")  # Aktualizuj etykietę
-
+        self.contrast_label.setText(f"contrast: {v}")  
     def change_saturation(self, value):
         v = value 
         self.cameraThread.cap.set(cv2.CAP_PROP_SATURATION, v)
-        self.saturation_label.setText(f"saturation: {v}")  # Aktualizuj etykietę
+        self.saturation_label.setText(f"saturation: {v}")  
 
 
     def manual_checkbox(self, state):
-        # print("state:", state)
-        # if state == 2:
-        #     self.cap.set(cv2.CAP_PROP_AUTO_WB, 0) 
-        #     self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 128) 
-        #     self.cap.set(cv2.CAP_PROP_CONTRAST, 128)
-        #     self.cap.set(cv2.CAP_PROP_SATURATION, 128)
-        #     self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
-        # else:
-        #     self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0) 
-        #     self.cap.set(cv2.CAP_PROP_CONTRAST, 0)
-        #     self.cap.set(cv2.CAP_PROP_SATURATION, 0)
-        #     self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
         pass
        
 
@@ -466,16 +448,14 @@ class DemoUI(QWidget):
             return
         w, h = map(int, text.split('x'))
 
-        # zatrzymaj wątek
+        
         self.cameraThread.stop()
         self.camera_thread.quit()
         self.camera_thread.wait()
-        
-        # stwórz nowy obiekt VideoCapture z nową rozdzielczością
+
         cam_index = self.camera_combo.currentData()
         self.cameraThread = cameraThread(cam_index, width=w, height=h)
-        
-        # nowy wątek
+
         self.camera_thread = QThread()
         self.cameraThread.moveToThread(self.camera_thread)
         self.cameraThread.frame_ready.connect(self.on_new_frame)
@@ -487,13 +467,11 @@ class DemoUI(QWidget):
         if index == 0:
             return
 
-        # zatrzymaj stary wątek
         self.cameraThread.stop()
         self.camera_thread.quit()
         self.camera_thread.wait()
         del self.cameraThread
 
-        # nowy wątek
         self.camera_thread = QThread()
         self.cameraThread = cameraThread(cam_index=self.camera_combo.currentData())
         self.cameraThread.moveToThread(self.camera_thread)
@@ -768,9 +746,6 @@ class tracker:
 class plotter:
     def __init__(self):
         pass
-        # self.error_time = []
-        # self.start_time = time.time()  # punkt odniesienia
-
     
     def update(self, curve_x, curve_y, error_time, error_x_data, error_y_data):
         curve_x.setData(error_time, error_x_data)
@@ -780,7 +755,6 @@ class serialMenager:
     def __init__(self):
         
         self.ser = None
-
 
     def detect_serial_ports(self):
 
@@ -855,7 +829,7 @@ class cameraThread(QObject):
             ret, frame = self.cap.read()
             if ret:
                 self.frame_ready.emit(frame)
-            time.sleep(0.001)  # NIE busy-loop
+            time.sleep(0.001) 
 
     def stop(self):
         self.running = False
@@ -868,7 +842,3 @@ if __name__ == "__main__":
     sys.exit(app.exec())
 
 
-
-
-
-## arcsec/pixel = 206.265*(pixel size (2.9um)/focal length)
