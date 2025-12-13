@@ -39,6 +39,13 @@ class DemoUI(QWidget):
         self.setWindowTitle("StarFinder")
         self.resize(1200, 800)
 
+        # ===================
+        # LAYOUT INTERFACE
+        # ===================
+
+
+
+
         # === ELEMENTY UI ===
 
         #tabs
@@ -55,6 +62,8 @@ class DemoUI(QWidget):
         self.arcsec = 206.265*(self.pixel_s/self.focal)
         self.brate = 115200
         self.port = None
+        self.error_time = []
+        self.start_time = time.time()  # punkt odniesienia
 
         self.btn_apply = QPushButton("apply")
         self.roi_input = QLineEdit()
@@ -75,10 +84,15 @@ class DemoUI(QWidget):
         self.focal_length = QLineEdit()
         self.focal_length.setPlaceholderText("set focal length")
 
+
+        self.plot_timer = QTimer()
+        self.plot_timer.setInterval(100)  # 10 Hz
+        self.plot_timer.timeout.connect(self.update_error_plot)
+        self.plot_timer.start()
         self.error_plot = pg.PlotWidget()
         self.error_plot.setTitle("tracking error")
-        self.error_plot.setLabel("left", "[degrees]")
-        self.error_plot.setLabel("bottom", "[frame]")
+        self.error_plot.setLabel("left", "ERROR [deg]")
+        self.error_plot.setLabel("bottom", "TIME[min]")
         self.error_plot.showGrid(x=True, y=True)
         self.error_plot.setBackground((40, 40, 40))
         self.error_plot.addLegend(pen= 'w')  # <-- dodaje legendę
@@ -370,6 +384,17 @@ class DemoUI(QWidget):
 
     # === OBSŁUGA ZDARZEŃ ===
 
+    def update_error_plot(self):
+        if not self.error_time:
+            return
+        self.error_x.setData(self.error_time, self.error_x_data)
+        self.error_y.setData(self.error_time, self.error_y_data)
+
+        self.error_plot.setXRange(
+            max(0, self.error_time[-1]-20),
+            self.error_time[-1]
+        )
+
     def change_port(self, text):
         sel = self.serial_combo.currentData()
         self.port = sel
@@ -531,24 +556,39 @@ class DemoUI(QWidget):
 
         if centroid is not None:
             self.target_pos = centroid
+            cx, cy = centroid
+            h, w, _ = frame.shape
+            error_x = (cx - w//2) * self.arcsec / 3600
+            error_y = (h//2 - cy) * self.arcsec / 3600
+            t = time.time() - self.start_time
+
+            self.error_time.append(t)
+            self.error_x_data.append(error_x)
+            self.error_y_data.append(error_y)
+
+            # ograniczamy do ostatnich 20 sekund
+            while self.error_time and t - self.error_time[0] > 20:
+                self.error_time.pop(0)
+                self.error_x_data.pop(0)
+                self.error_y_data.pop(0)
+
+            self.plotter.update(
+                self.error_x,
+                self.error_y,
+                self.error_time,
+                self.error_x_data,
+                self.error_y_data
+            )
 
         frame = self.overlay.apply_overlay(
             frame, centroid, self.roi_size,
             self.mark_check.isChecked(),
             self.roi_box_check.isChecked()
-        )
-        if centroid is not None:
-            self.plotter.plotter(
-                frame,
-                self.target_pos,
-                centroid,
-                self.error_data,
-                self.error_x_data,
-                self.error_y_data,
-                self.error_x,
-                self.error_y,
-                self.arcsec
-        )
+            )
+
+        
+    # --- wykres ---
+        
 
         if self.tracker.last_threshold is not None:
             th = self.tracker.last_threshold
@@ -728,27 +768,13 @@ class tracker:
 class plotter:
     def __init__(self):
         pass
+        # self.error_time = []
+        # self.start_time = time.time()  # punkt odniesienia
 
     
-    def plotter(self, frame, target_pos, centroid, error_data, error_x_data, error_y_data, curve_x, curve_y, arcs):
-        if target_pos is not None and centroid is not None:
-            tx, ty = target_pos
-            cx, cy = centroid
-            h, w, _ = frame.shape
-            error = ((cx - w//2)**2 + (cy - h//2)**2)**0.5
-            error_x = cx - w//2
-            error_y = h//2 - cy
-            error_data.append(error)
-            error_x_data.append((error_x*arcs)/3600)
-            error_y_data.append((error_y*arcs)/3600)
-
-            if len(error_data) > 500:
-                error_data.pop(0)
-                error_y_data.pop(0)
-                error_x_data.pop(0)
-
-            curve_x.setData(error_x_data)
-            curve_y.setData(error_y_data)
+    def update(self, curve_x, curve_y, error_time, error_x_data, error_y_data):
+        curve_x.setData(error_time, error_x_data)
+        curve_y.setData(error_time, error_y_data)
 
 class serialMenager:
     def __init__(self):
