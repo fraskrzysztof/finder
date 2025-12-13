@@ -1,5 +1,6 @@
 import sys
 import cv2
+import time
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
     QHBoxLayout, QSlider, QTabWidget, QComboBox, QLineEdit, QSizePolicy,
@@ -10,10 +11,21 @@ import numpy as np
 import serial
 import serial.tools.list_ports
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread, QObject, Signal, Slot
 from PySide6.QtGui import QImage, QPixmap
 
 import pyqtgraph as pg
+import glob
+
+def detect_cameras():
+    devices = glob.glob('/dev/video*')
+    available = []
+    for dev in devices:
+        cap = cv2.VideoCapture(dev)
+        if cap.isOpened():
+            available.append(dev)
+            cap.release()
+    return available
 
 class DemoUI(QWidget):
     def __init__(self):
@@ -22,6 +34,7 @@ class DemoUI(QWidget):
         self.plotter = plotter()
         self.tracker = tracker()
         self.serialMenager = serialMenager()
+        self.cameraThread = cameraThread()
 
         self.setWindowTitle("StarFinder")
         self.resize(1200, 800)
@@ -113,16 +126,8 @@ class DemoUI(QWidget):
         self.camera_combo = QComboBox()
         self.camera_combo.addItems(["choose camera"])
 
-        def detect_cameras(max_devices=5):
-            available = []
-            for i in range(max_devices):
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    available.append(i)
-                    cap.release()
-            return available
         
-        cameras = detect_cameras(5)
+        cameras = detect_cameras()
         for cam in cameras:
             self.camera_combo.addItem(f"camera {cam}", cam)
 
@@ -153,15 +158,21 @@ class DemoUI(QWidget):
         self.threshold_image.setAlignment(Qt.AlignCenter)
         self.threshold_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # Kamera i timer
-        self.cap = cv2.VideoCapture(2)  # 0 to domyślna kamera
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        # # Kamera i timer
+        # self.cap = cv2.VideoCapture(2)  # 0 to domyślna kamera
+        # self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_camera)
-        self.timer.start(1000/60)  
+        self.camera_thread = QThread()
+        
+
+        self.cameraThread.moveToThread(self.camera_thread)
+
+        self.camera_thread.started.connect(self.cameraThread.run)
+        self.cameraThread.frame_ready.connect(self.on_new_frame)
+
+        self.camera_thread.start()
 
 
 
@@ -211,13 +222,11 @@ class DemoUI(QWidget):
         tab_camera = QWidget()
         tab_camera_layout = QVBoxLayout()
 
-
+        tab_camera_layout.addWidget(QLabel("camera:"))
+        tab_camera_layout.addWidget(self.camera_combo)
 
         tab_camera_layout.addWidget(QLabel("Resolution:"))
         tab_camera_layout.addWidget(self.combo)
-
-        tab_camera_layout.addWidget(QLabel("camera:"))
-        tab_camera_layout.addWidget(self.camera_combo)
 
         tab_camera_layout.addWidget(self.exposure_label)
         tab_camera_layout.addWidget(self.slider1)
@@ -391,23 +400,23 @@ class DemoUI(QWidget):
     #WYLACZYC TRYBY AUTO KAMERY
     def change_exposure(self, value):
         v = value 
-        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # wyłącz auto
-        self.cap.set(cv2.CAP_PROP_EXPOSURE, v) 
+        self.cameraThread.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # wyłącz auto
+        self.cameraThread.cap.set(cv2.CAP_PROP_EXPOSURE, v) 
         self.exposure_label.setText(f"exposure: {v}")  # Aktualizuj etykietę 
 
     def change_brightness(self, value):
         v = value 
-        self.cap.set(cv2.CAP_PROP_BRIGHTNESS, v)
+        self.cameraThread.cap.set(cv2.CAP_PROP_BRIGHTNESS, v)
         self.brightness_label.setText(f"brightness: {v}")  # Aktualizuj etykietę 
 
     def change_contrast(self, value):
         v = value 
-        self.cap.set(cv2.CAP_PROP_CONTRAST, v)
+        self.cameraThread.cap.set(cv2.CAP_PROP_CONTRAST, v)
         self.contrast_label.setText(f"contrast: {v}")  # Aktualizuj etykietę
 
     def change_saturation(self, value):
         v = value 
-        self.cap.set(cv2.CAP_PROP_SATURATION, v)
+        self.cameraThread.cap.set(cv2.CAP_PROP_SATURATION, v)
         self.saturation_label.setText(f"saturation: {v}")  # Aktualizuj etykietę
 
 
@@ -428,29 +437,45 @@ class DemoUI(QWidget):
        
 
     def change_res(self, text):
-        
+        if text == "choose resolution":
+            return
         w, h = map(int, text.split('x'))
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+
+        # zatrzymaj wątek
+        self.cameraThread.stop()
+        self.camera_thread.quit()
+        self.camera_thread.wait()
+        
+        # stwórz nowy obiekt VideoCapture z nową rozdzielczością
+        cam_index = self.camera_combo.currentData()
+        self.cameraThread = cameraThread(cam_index, width=w, height=h)
+        
+        # nowy wątek
+        self.camera_thread = QThread()
+        self.cameraThread.moveToThread(self.camera_thread)
+        self.cameraThread.frame_ready.connect(self.on_new_frame)
+        self.camera_thread.started.connect(self.cameraThread.run)
+        self.camera_thread.start()
        
 
     def change_camera(self, index):
         if index == 0:
             return
-        
-        self.timer.stop()
-        
-        if self.cap:
-            self.cap.release()
-        
-        cam_index = self.camera_combo.currentData()
-        self.cap = cv2.VideoCapture(cam_index)
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        
-        QApplication.processEvents()
-        cv2.waitKey(50)
-        
-        self.timer.start(1000/30)
+
+        # zatrzymaj stary wątek
+        self.cameraThread.stop()
+        self.camera_thread.quit()
+        self.camera_thread.wait()
+        del self.cameraThread
+
+        # nowy wątek
+        self.camera_thread = QThread()
+        self.cameraThread = cameraThread(cam_index=self.camera_combo.currentData())
+        self.cameraThread.moveToThread(self.camera_thread)
+        self.camera_thread.started.connect(self.cameraThread.run)
+        self.cameraThread.frame_ready.connect(self.on_new_frame)
+        self.camera_thread.start()
+
 
 
 
@@ -485,76 +510,89 @@ class DemoUI(QWidget):
 
         print("Wybrano punkt:", self.target_pos)
 
-    
+    def closeEvent(self, event):
+        self.cameraThread.stop()
+        self.camera_thread.quit()
+        self.camera_thread.wait()
+        event.accept()
 
-    def update_camera(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        # oryginalny, kolorowy obraz
+    @Slot(object)
+    def on_new_frame(self, frame):
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # zapis wymiarów dla trackera
         self.frame_h, self.frame_w, _ = frame.shape
 
-            # --- TRACKING (punkt 4) ---
-        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)  # osobna kopia grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
+        centroid = self.tracker.track_in_roi(
+            frame, gray, self.tracking_enabled,
+            self.target_pos, self.roi_size
+        )
 
-        centroid = self.tracker.track_in_roi(frame, gray, self.tracking_enabled, 
-                                             self.target_pos, self.roi_size)             
         if centroid is not None:
             self.target_pos = centroid
 
-        frame = self.overlay.apply_overlay(frame, centroid, self.roi_size, 
-                                           center_mark_enabled=self.mark_check.isChecked(), 
-                                           roi_mark_enabled=self.roi_box_check.isChecked())
-        
-        self.plotter.plotter(frame, self.target_pos, centroid,
-                            self.error_data, self.error_x_data, self.error_y_data, 
-                            self.error_x, self.error_y, self.arcsec)
+        frame = self.overlay.apply_overlay(
+            frame, centroid, self.roi_size,
+            self.mark_check.isChecked(),
+            self.roi_box_check.isChecked()
+        )
         if centroid is not None:
-            e_x, e_y = self.tracker.error_calc(frame, centroid, self.arcsec)
-            self.serialMenager.serial_send(e_x, e_y)
-
-            # --- KONWERSJA NA QPIXMAP I WYŚWIETLENIE ---
-        h, w, ch = frame.shape
-        bytes_per_line = ch * w
-        qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        pix = QPixmap.fromImage(qimg)
-
-        self.image_label.setPixmap(
-            pix.scaled(
-                self.image_label.width(),
-                self.image_label.height(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
+            self.plotter.plotter(
+                frame,
+                self.target_pos,
+                centroid,
+                self.error_data,
+                self.error_x_data,
+                self.error_y_data,
+                self.error_x,
+                self.error_y,
+                self.arcsec
         )
 
         if self.tracker.last_threshold is not None:
             th = self.tracker.last_threshold
 
-            th_rgb = cv2.cvtColor(th, cv2. COLOR_GRAY2RGB)
+            th_rgb = cv2.cvtColor(th, cv2.COLOR_GRAY2RGB)
             th_rgb = np.ascontiguousarray(th_rgb)
+
             rh, rw, _ = th_rgb.shape
             bytes_per_line = 3 * rw
-            qimg_roi = QImage(th_rgb.data, rw, rh, bytes_per_line, QImage.Format_RGB888)
-            qimg_roi = qimg_roi.copy()
+
+            qimg_roi = QImage(
+                th_rgb.data,
+                rw,
+                rh,
+                bytes_per_line,
+                QImage.Format_RGB888
+            )
+
+            qimg_roi = qimg_roi.copy()  # bardzo ważne!
+
             pix = QPixmap.fromImage(qimg_roi)
 
             self.threshold_image.setPixmap(
                 pix.scaled(
-                    self.threshold_image.width(),
-                    self.threshold_image.height(),
+                    self.threshold_image.size(),
                     Qt.KeepAspectRatio,
                     Qt.SmoothTransformation
                 )
             )
         else:
-            self.threshold_image.setText("brak ROI")
             self.threshold_image.setPixmap(QPixmap())
+
+        # QImage
+        h, w, ch = frame.shape
+        qimg = QImage(frame.data, w, h, ch*w, QImage.Format_RGB888)
+        pix = QPixmap.fromImage(qimg)
+
+        self.image_label.setPixmap(
+            pix.scaled(
+                self.image_label.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+        )
 
 class OverlayRenderer:
     def __init__(self):
@@ -772,6 +810,30 @@ class serialMenager:
         except Exception as e:
             print(f"[SerialMenager] Error sending data: {e}")
             return False
+
+
+class cameraThread(QObject):
+    frame_ready = Signal(object)
+    def __init__(self, cam_index=0, width=1920, height=1080):
+        super().__init__()
+        self.running = False
+        self.cap = cv2.VideoCapture(cam_index)
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+
+    @Slot()
+    def run(self):
+        self.running = True
+        while self.running:
+            ret, frame = self.cap.read()
+            if ret:
+                self.frame_ready.emit(frame)
+            time.sleep(0.001)  # NIE busy-loop
+
+    def stop(self):
+        self.running = False
+        self.cap.release()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
