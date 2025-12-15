@@ -19,13 +19,28 @@ import glob
 
 def detect_cameras():
     devices = glob.glob('/dev/video*')
+    print(devices)
     available = []
     for dev in devices:
         cap = cv2.VideoCapture(dev)
         if cap.isOpened():
             available.append(dev)
             cap.release()
-    return available
+    return devices
+# def detect_cameras():
+#     devices = sorted(glob.glob("/dev/video*"))
+
+#     cameras = []
+#     for dev in devices:
+#         # filtrujemy tylko prawdziwe urządzenia wideo
+#         try:
+#             stat = os.stat(dev)
+#             if stat.st_mode & 0o60000:  # character device
+#                 cameras.append(dev)
+#         except Exception:
+#             pass
+
+#     return cameras
 
 class DemoUI(QWidget):
     def __init__(self):
@@ -97,32 +112,32 @@ class DemoUI(QWidget):
 
         ####CAMERA SETTINGS TAB
         self.slider1 = QSlider(Qt.Horizontal)
-        self.slider1.setRange(0, 2000)
-        self.slider1.setValue(50)
+        self.slider1.setRange(0, 5000)
+        self.slider1.setValue(0)
         self.slider1.valueChanged.connect(self.change_exposure)
         self.exposure_val = 50
-        self.exposure_label = QLabel(f"exposure: {self.exposure_val}")
+        self.exposure_label = QLabel(f"exposure:    AUTO")
 
         self.slider4 = QSlider(Qt.Horizontal)
         self.slider4.setRange(-127/2, 127/2)
-        self.slider4.setValue(0)
+        self.slider4.setValue(-127/2)
         self.slider4.valueChanged.connect(self.change_brightness)
         self.brightness_val = 50
-        self.brightness_label = QLabel(f"brightness: {self.brightness_val}")
+        self.brightness_label = QLabel(f"brightness: AUTO")
 
         self.slider2 = QSlider(Qt.Horizontal)
         self.slider2.setRange(0, 50)
-        self.slider2.setValue(25)
+        self.slider2.setValue(0)
         self.slider2.valueChanged.connect(self.change_contrast)
         self.contrast_val = 50
-        self.contrast_label = QLabel(f"contrast: {self.contrast_val}")
+        self.contrast_label = QLabel(f"contrast: AUTO")
 
         self.slider3 = QSlider(Qt.Horizontal)
         self.slider3.setRange(0, 127)
-        self.slider3.setValue(50)
+        self.slider3.setValue(0)
         self.slider3.valueChanged.connect(self.change_saturation)
         self.saturation_val = 50
-        self.saturation_label = QLabel(f"saturation: {self.saturation_val}")
+        self.saturation_label = QLabel(f"saturation: AUTO")
         
         self.combo = QComboBox()
         self.combo.addItems(["choose resolution","1920x1080", "1280x720", "640x480"])
@@ -133,18 +148,27 @@ class DemoUI(QWidget):
         
         cameras = detect_cameras()
         for cam in cameras:
-            self.camera_combo.addItem(f"camera {cam}", cam)
+            self.camera_combo.addItem(f"{cam}", cam)
 
 
         ####MAIN SETTINGS TAB
-        self.manual_check = QCheckBox("manual")
-        self.manual_check.setChecked(False)
 
-        self.mark_check = QCheckBox("cross")
+        self.mark_check = QCheckBox("center mark")
         self.mark_check.setChecked(True)
+
+        self.cross_combo = QComboBox()
+        self.cross_combo.clear()
+        self.cross_combo.addItems(["cross", "circle", "star"])
 
         self.roi_box_check = QCheckBox("ROI box")
         self.roi_box_check.setChecked(True)
+
+        self.slider_roi_mark_size = QSlider(Qt.Horizontal)
+        self.slider_roi_mark_size.setRange(10, 50)
+        self.slider_roi_mark_size.setValue(10)
+        self.slider_roi_mark_size.valueChanged.connect(self.change_roi_mark_size)
+        self.roi_mark_size = 10
+        self.roi_mark_size_label = QLabel(f"ROI mark size: {self.roi_mark_size}")
 
 
         ####COM TAB
@@ -176,9 +200,15 @@ class DemoUI(QWidget):
 
         tab_general = QWidget()
         tab_general_layout = QVBoxLayout()
-        tab_general_layout.addWidget(self.manual_check)
+        tab_general_layout.addWidget(QLabel("Tracking mark settings:"))
+        roi_settings_layout = QHBoxLayout()
+        roi_settings_layout.addWidget(self.cross_combo, stretch = 2)
+        roi_settings_layout.addWidget(self.roi_box_check, stretch = 0)
+        tab_general_layout.addLayout(roi_settings_layout)
+        tab_general_layout.addWidget(self.roi_mark_size_label)
+        tab_general_layout.addWidget(self.slider_roi_mark_size)
+        self.slider_roi_mark_size.valueChanged.connect(self.change_roi_mark_size)
         tab_general_layout.addWidget(self.mark_check)
-        tab_general_layout.addWidget(self.roi_box_check)
         tab_general_layout.addStretch()
         tab_general.setLayout(tab_general_layout)
 
@@ -187,7 +217,11 @@ class DemoUI(QWidget):
         tab_camera_layout = QVBoxLayout()
 
         tab_camera_layout.addWidget(QLabel("camera:"))
-        tab_camera_layout.addWidget(self.camera_combo)
+        camera_combo_layout = QHBoxLayout()
+        self.btn_ref_camera = QPushButton("refresh")
+        camera_combo_layout.addWidget(self.camera_combo, stretch=2)
+        camera_combo_layout.addWidget(self.btn_ref_camera, stretch=1)
+        tab_camera_layout.addLayout(camera_combo_layout)
 
         tab_camera_layout.addWidget(QLabel("Resolution:"))
         tab_camera_layout.addWidget(self.combo)
@@ -224,10 +258,11 @@ class DemoUI(QWidget):
 
         tab_tracking_layout.addStretch()
         tab_tracking.setLayout(tab_tracking_layout)
-
-        self.tabs.addTab(tab_general, "Settings")
-        self.tabs.addTab(tab_camera, "Camera")
+        
+        self.tabs.addTab(tab_camera, "Sensor")
         self.tabs.addTab(tab_tracking, "Tracking")
+        self.tabs.addTab(tab_general, "GUI Settings")
+        
 
         ####COM TAB 
 
@@ -239,7 +274,11 @@ class DemoUI(QWidget):
         com_tab = QWidget()
         com_tab_layout = QVBoxLayout()
         com_tab_layout.addWidget(QLabel("Select port:"))
-        com_tab_layout.addWidget(self.serial_combo)
+        serial_port_layout = QHBoxLayout()
+        serial_port_layout.addWidget(self.serial_combo, stretch= 2)
+        self.btn_ref_ports = QPushButton("refresh")
+        serial_port_layout.addWidget(self.btn_ref_ports, stretch=1)
+        com_tab_layout.addLayout(serial_port_layout)
         com_tab_layout.addWidget(QLabel("baudrate:"))
         com_tab_layout.addWidget(self.baudrate)
         com_buttons =QHBoxLayout()
@@ -268,8 +307,8 @@ class DemoUI(QWidget):
         self.plot_timer.start()
         self.error_plot = pg.PlotWidget()
         self.error_plot.setTitle("tracking error")
-        self.error_plot.setLabel("left", "ERROR [deg]")
-        self.error_plot.setLabel("bottom", "TIME[min]")
+        self.error_plot.setLabel("left", "Error [deg]")
+        self.error_plot.setLabel("bottom", "Time [s]")
         self.error_plot.showGrid(x=True, y=True)
         self.error_plot.setBackground((40, 40, 40))
         self.error_plot.addLegend(pen= 'w')  # <-- dodaje legendę
@@ -293,6 +332,7 @@ class DemoUI(QWidget):
 
         self.threshold_image = QLabel()
         self.threshold_image.setAlignment(Qt.AlignCenter)
+        self.threshold_image.setStyleSheet("background-color: black;")
         self.threshold_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         #### THREADING
@@ -377,8 +417,26 @@ class DemoUI(QWidget):
         self.serial_combo.currentTextChanged.connect(self.change_port)
         self.btn_open.clicked.connect(self.on_open)
         self.btn_close.clicked.connect(self.on_close)
+        self.btn_ref_ports.clicked.connect(self.on_ref_ports)
+        self.btn_ref_camera.clicked.connect(self.on_ref_cameras)
 
     # ===  ===
+
+
+    def on_ref_cameras(self):
+        cameras = detect_cameras()
+        self.camera_combo.clear()
+        for cam in cameras:
+            self.camera_combo.addItem(f"camera {cam}", cam)
+
+
+    def on_ref_ports(self):
+        ports = self.serialMenager.detect_serial_ports()
+        self.serial_combo.clear()
+        self.serial_combo.addItem("select port")
+        for device, desc in ports:
+            self.serial_combo.addItem(f"{device}  ({desc})", device)
+
 
     def update_error_plot(self):
         if not self.error_time:
@@ -418,11 +476,18 @@ class DemoUI(QWidget):
 
         self.roi_label.setText(f"roi size: {self.roi_size}")  
         
+
+
+    def change_roi_mark_size(self, value):
+        v = value
+        self.roi_mark_size = v
+        self.roi_mark_size_label.setText(f"ROI mark size: {v}")
+
     def change_exposure(self, value):
         v = value 
         self.cameraThread.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  
         self.cameraThread.cap.set(cv2.CAP_PROP_EXPOSURE, v) 
-        self.exposure_label.setText(f"exposure: {v}")  
+        self.exposure_label.setText(f"exposure: {v/10} ms")  
 
     def change_brightness(self, value):
         v = value 
@@ -438,10 +503,6 @@ class DemoUI(QWidget):
         self.cameraThread.cap.set(cv2.CAP_PROP_SATURATION, v)
         self.saturation_label.setText(f"saturation: {v}")  
 
-
-    def manual_checkbox(self, state):
-        pass
-       
 
     def change_res(self, text):
         if text == "choose resolution":
@@ -463,21 +524,28 @@ class DemoUI(QWidget):
         self.camera_thread.start()
        
 
+
     def change_camera(self, index):
-        if index == 0:
+        cam_index = self.camera_combo.currentData()
+        if cam_index is None:
             return
 
-        self.cameraThread.stop()
-        self.camera_thread.quit()
-        self.camera_thread.wait()
-        del self.cameraThread
+        # zatrzymaj starą kamerę
+        if hasattr(self, "cameraThread"):
+            self.cameraThread.stop()
+            self.camera_thread.quit()
+            self.camera_thread.wait()
 
+        # nowy wątek
         self.camera_thread = QThread()
-        self.cameraThread = cameraThread(cam_index=self.camera_combo.currentData())
+        self.cameraThread = cameraThread(cam_index=cam_index)
         self.cameraThread.moveToThread(self.camera_thread)
+
         self.camera_thread.started.connect(self.cameraThread.run)
         self.cameraThread.frame_ready.connect(self.on_new_frame)
+
         self.camera_thread.start()
+
 
 
 
@@ -560,6 +628,7 @@ class DemoUI(QWidget):
 
         frame = self.overlay.apply_overlay(
             frame, centroid, self.roi_size,
+            self.roi_mark_size,
             self.mark_check.isChecked(),
             self.roi_box_check.isChecked()
             )
@@ -616,7 +685,7 @@ class OverlayRenderer:
     def __init__(self):
         pass
 
-    def draw_tracking_marker(self, frame, centroid):
+    def draw_tracking_marker(self, frame, centroid, size):
         if centroid is None:
             return frame
         
@@ -626,7 +695,7 @@ class OverlayRenderer:
             (cx, cy),
             (255, 0, 0),
             markerType=cv2.MARKER_CROSS,
-            markerSize=20,
+            markerSize=size,
             thickness=2
         )
         return frame
@@ -666,8 +735,8 @@ class OverlayRenderer:
         return frame
 
     
-    def apply_overlay(self, frame, centroid, roi_size, center_mark_enabled=True, roi_mark_enabled=True):
-        frame = self.draw_tracking_marker(frame, centroid)
+    def apply_overlay(self, frame, centroid, roi_size, marker_size, center_mark_enabled=True, roi_mark_enabled=True):
+        frame = self.draw_tracking_marker(frame, centroid, marker_size)
         frame = self.draw_error_line(frame, centroid)
     
         if center_mark_enabled:
@@ -814,7 +883,7 @@ class serialMenager:
 
 class cameraThread(QObject):
     frame_ready = Signal(object)
-    def __init__(self, cam_index=0, width=1920, height=1080):
+    def __init__(self, cam_index=5, width=1920, height=1080):
         super().__init__()
         self.running = False
         self.cap = cv2.VideoCapture(cam_index)
