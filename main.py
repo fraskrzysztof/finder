@@ -156,9 +156,15 @@ class DemoUI(QWidget):
         self.mark_check = QCheckBox("center mark")
         self.mark_check.setChecked(True)
 
-        self.cross_combo = QComboBox()
-        self.cross_combo.clear()
-        self.cross_combo.addItems(["cross", "circle", "star"])
+        self.roi_mark_combo = QComboBox()
+        self.roi_mark_combo.clear()
+        self.roi_mark_combo.addItem("cross", cv2.MARKER_CROSS)
+        self.roi_mark_combo.addItem("diamond", cv2.MARKER_DIAMOND)
+        self.roi_mark_combo.addItem("star", cv2.MARKER_STAR)
+        self.roi_mark_combo.addItem("square", cv2.MARKER_SQUARE)
+        self.roi_mark_combo.addItem("tilted cross", cv2.MARKER_TILTED_CROSS)
+        self.roi_mark_combo.addItem("triangle down", cv2.MARKER_TRIANGLE_DOWN)
+        self.roi_mark_combo.addItem("triangle up", cv2.MARKER_TRIANGLE_UP)
 
         self.roi_box_check = QCheckBox("ROI box")
         self.roi_box_check.setChecked(True)
@@ -202,7 +208,7 @@ class DemoUI(QWidget):
         tab_general_layout = QVBoxLayout()
         tab_general_layout.addWidget(QLabel("Tracking mark settings:"))
         roi_settings_layout = QHBoxLayout()
-        roi_settings_layout.addWidget(self.cross_combo, stretch = 2)
+        roi_settings_layout.addWidget(self.roi_mark_combo, stretch = 2)
         roi_settings_layout.addWidget(self.roi_box_check, stretch = 0)
         tab_general_layout.addLayout(roi_settings_layout)
         tab_general_layout.addWidget(self.roi_mark_size_label)
@@ -419,9 +425,12 @@ class DemoUI(QWidget):
         self.btn_close.clicked.connect(self.on_close)
         self.btn_ref_ports.clicked.connect(self.on_ref_ports)
         self.btn_ref_camera.clicked.connect(self.on_ref_cameras)
+        self.roi_mark_combo.currentTextChanged.connect(self.change_roi_mark)
 
     # ===  ===
-
+    def change_roi_mark(self, text):
+        sel = self.roi_mark_combo.currentData()
+        print(sel)
 
     def on_ref_cameras(self):
         cameras = detect_cameras()
@@ -625,10 +634,11 @@ class DemoUI(QWidget):
                 self.error_x_data,
                 self.error_y_data
             )
-
+        print(self.roi_mark_combo.currentData())
         frame = self.overlay.apply_overlay(
             frame, centroid, self.roi_size,
             self.roi_mark_size,
+            self.roi_mark_combo.currentData(),
             self.mark_check.isChecked(),
             self.roi_box_check.isChecked()
             )
@@ -685,7 +695,7 @@ class OverlayRenderer:
     def __init__(self):
         pass
 
-    def draw_tracking_marker(self, frame, centroid, size):
+    def draw_tracking_marker(self, frame, centroid, size, marker):
         if centroid is None:
             return frame
         
@@ -694,10 +704,12 @@ class OverlayRenderer:
             frame,
             (cx, cy),
             (255, 0, 0),
-            markerType=cv2.MARKER_CROSS,
+            markerType=marker,
             markerSize=size,
             thickness=2
         )
+
+ 
         return frame
     
 
@@ -716,8 +728,16 @@ class OverlayRenderer:
         cx, cy = w // 2, h // 2
 
         # gruby krzyż
-        cv2.line(frame, (cx - 20, cy), (cx + 20, cy), (120, 255, 0), 3)
-        cv2.line(frame, (cx, cy - 20), (cx, cy + 20), (120, 255, 0), 3)
+        # cv2.line(frame, (cx - 20, cy), (cx + 20, cy), (120, 255, 0), 3)
+        # cv2.line(frame, (cx, cy - 20), (cx, cy + 20), (120, 255, 0), 3)
+        cv2.drawMarker(
+            frame,
+            (cx, cy),
+            (0, 255, 0),
+            markerType=cv2.MARKER_DIAMOND,
+            markerSize=40,
+            thickness=2
+        )
 
         # cienkie pełne linie
         cv2.line(frame, (0, cy), (w, cy), (120, 255, 0), 1)
@@ -735,8 +755,8 @@ class OverlayRenderer:
         return frame
 
     
-    def apply_overlay(self, frame, centroid, roi_size, marker_size, center_mark_enabled=True, roi_mark_enabled=True):
-        frame = self.draw_tracking_marker(frame, centroid, marker_size)
+    def apply_overlay(self, frame, centroid, roi_size, marker_size, mark_type, center_mark_enabled=True, roi_mark_enabled=True):
+        frame = self.draw_tracking_marker(frame, centroid, marker_size, mark_type)
         frame = self.draw_error_line(frame, centroid)
     
         if center_mark_enabled:
