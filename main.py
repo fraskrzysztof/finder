@@ -8,8 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 import numpy as np
-import serial
-import serial.tools.list_ports
+
 
 from PySide6.QtCore import Qt, QTimer, QThread, QObject, Signal, Slot
 from PySide6.QtGui import QImage, QPixmap
@@ -30,7 +29,7 @@ def detect_cameras():
         if cap.isOpened():
             available.append(dev)
             cap.release()
-    return devices
+    return available
 
 class DemoUI(QWidget):
     def __init__(self):
@@ -44,7 +43,7 @@ class DemoUI(QWidget):
         self.plotter = plotter()
         self.tracker = tracker()
         self.serialMenager = serialMenager()
-        self.cameraThread = cameraThread()
+        self.cameraThread =  CameraThread()
 
         # ===================
         # WINDOW SETTINGS
@@ -58,16 +57,16 @@ class DemoUI(QWidget):
         # ===================
 
         self.tracking_enabled = False
-        self.roi_size = 200  # wielkość ROI (px)
-        self.target_pos = None  # (x, y) klikniętej gwiazdy
+        self.roi_size = 200 
+        self.target_pos = None 
         self.focal = 190
         self.pixel_s = 2.9
         self.arcsec = 206.265*(self.pixel_s/self.focal)
         self.brate = 115200
         self.port = None
         self.error_time = []
-        self.start_time = time.time()  # punkt odniesienia
-        self.error_data = []  # lista do przechowywania wartości błędu
+        self.start_time = time.time() 
+        self.error_data = []  
         self.error_x_data = []
         self.error_y_data = []
 
@@ -300,7 +299,7 @@ class DemoUI(QWidget):
 
         #### PLOT INIT
         self.plot_timer = QTimer()
-        self.plot_timer.setInterval(100)  # 10 Hz
+        self.plot_timer.setInterval(100) 
         self.plot_timer.timeout.connect(self.update_error_plot)
         self.plot_timer.start()
         self.error_plot = pg.PlotWidget()
@@ -309,7 +308,7 @@ class DemoUI(QWidget):
         self.error_plot.setLabel("bottom", "Time [s]")
         self.error_plot.showGrid(x=True, y=True)
         self.error_plot.setBackground((40, 40, 40))
-        self.error_plot.addLegend(pen= 'w')  # <-- dodaje legendę
+        self.error_plot.addLegend(pen= 'w')  
         self.error_plot.getAxis('left').enableAutoSIPrefix(False)
 
         self.error_x = self.error_plot.plot(pen="r", name='x')
@@ -359,12 +358,6 @@ class DemoUI(QWidget):
         threshold_layout.addWidget(self.threshold_image)
         self.threshold_frame.setLayout(threshold_layout)
         
-        #### THREADING
-        self.camera_thread = QThread()
-        self.cameraThread.moveToThread(self.camera_thread)
-        self.camera_thread.started.connect(self.cameraThread.run)
-        self.cameraThread.frame_ready.connect(self.on_new_frame)
-        self.camera_thread.start()
 
 
         #### BOTTOM FRAME
@@ -398,13 +391,24 @@ class DemoUI(QWidget):
         self.btn_close.clicked.connect(self.on_close)
         self.btn_ref_ports.clicked.connect(self.on_ref_ports)
         self.btn_ref_camera.clicked.connect(self.on_ref_cameras)
-        self.roi_mark_combo.currentTextChanged.connect(self.change_roi_mark)
+
+        self.roi_box_check.stateChanged.connect(self.update_overlay_params)
+        self.mark_check.stateChanged.connect(self.update_overlay_params)
+        self.roi_mark_combo.currentIndexChanged.connect(self.update_overlay_params)
+
 
     # ===  ===
-    def change_roi_mark(self, text):
-        sel = self.roi_mark_combo.currentData()
+
+    def stop_camera_thread(self):
+        if hasattr(self, "cameraThread") and self.cameraThread is not None:
+            self.cameraThread.stop()  
+            if hasattr(self, "camera_thread"):
+                self.camera_thread.quit()
+                self.camera_thread.wait()
+
 
     def on_ref_cameras(self):
+        self.stop_camera_thread()
         cameras = detect_cameras()
         self.camera_combo.clear()
         for cam in cameras:
@@ -420,15 +424,17 @@ class DemoUI(QWidget):
 
 
     def update_error_plot(self):
-        if not self.error_time:
+        if len(self.error_time) < 2:
             return
+
         self.error_x.setData(self.error_time, self.error_x_data)
         self.error_y.setData(self.error_time, self.error_y_data)
 
         self.error_plot.setXRange(
-            max(0, self.error_time[-1]-20),
+            max(0, self.error_time[-1] - 20),
             self.error_time[-1]
         )
+
 
     def change_port(self, text):
         sel = self.serial_combo.currentData()
@@ -452,10 +458,10 @@ class DemoUI(QWidget):
         self.serialMenager.close_serial_port()
         
     def change_roi(self, value):
-        self.roi_size = value 
-        self.roi_label.setText(f"roi size: {self.roi_size}")  
+        self.roi_size = value
+        self.roi_label.setText(f"roi size: {value}")
+        self.cameraThread.set_roi_size(self.roi_size)
 
-        self.roi_label.setText(f"roi size: {self.roi_size}")  
         
 
 
@@ -463,47 +469,38 @@ class DemoUI(QWidget):
         v = value
         self.roi_mark_size = v
         self.roi_mark_size_label.setText(f"ROI mark size: {v}")
+        self.update_overlay_params() 
 
     def change_exposure(self, value):
         v = value 
-        self.cameraThread.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  
-        self.cameraThread.cap.set(cv2.CAP_PROP_EXPOSURE, v) 
+        self.cameraThread.change_exposure(v)
         self.exposure_label.setText(f"exposure: {v/10} ms")  
 
     def change_brightness(self, value):
         v = value 
-        self.cameraThread.cap.set(cv2.CAP_PROP_BRIGHTNESS, v)
+        self.cameraThread.change_brightness(v)
         self.brightness_label.setText(f"brightness: {v}")   
 
     def change_contrast(self, value):
         v = value 
-        self.cameraThread.cap.set(cv2.CAP_PROP_CONTRAST, v)
+        self.cameraThread.change_contrast(v)
         self.contrast_label.setText(f"contrast: {v}")  
     def change_saturation(self, value):
         v = value 
-        self.cameraThread.cap.set(cv2.CAP_PROP_SATURATION, v)
+        self.cameraThread.change_saturation(v)
         self.saturation_label.setText(f"saturation: {v}")  
 
 
     def change_res(self, text):
         if text == "choose resolution":
             return
-        w, h = map(int, text.split('x'))
-
-        
-        self.cameraThread.stop()
-        self.camera_thread.quit()
-        self.camera_thread.wait()
-
-        cam_index = self.camera_combo.currentData()
-        self.cameraThread = cameraThread(cam_index, width=w, height=h)
-
-        self.camera_thread = QThread()
-        self.cameraThread.moveToThread(self.camera_thread)
-        self.cameraThread.frame_ready.connect(self.on_new_frame)
-        self.camera_thread.started.connect(self.cameraThread.run)
-        self.camera_thread.start()
-       
+        try:
+            w, h = map(int, text.split('x'))
+            if self.cameraThread:
+                self.cameraThread.res_signal.emit(w, h)
+                print(f"Emitted resolution change to {w}x{h}")
+        except ValueError:
+            print(f"Invalid resolution format: {text}")
 
 
     def change_camera(self, index):
@@ -511,26 +508,89 @@ class DemoUI(QWidget):
         if cam_index is None:
             return
 
-        # zatrzymaj starą kamerę
-        if hasattr(self, "cameraThread"):
+        if hasattr(self, "camera_thread") and hasattr(self, "cameraThread"):
             self.cameraThread.stop()
             self.camera_thread.quit()
             self.camera_thread.wait()
 
-        # nowy wątek
         self.camera_thread = QThread()
-        self.cameraThread = cameraThread(cam_index=cam_index)
+        self.cameraThread = CameraThread(cam_index=cam_index)
         self.cameraThread.moveToThread(self.camera_thread)
 
         self.camera_thread.started.connect(self.cameraThread.run)
-        self.cameraThread.frame_ready.connect(self.on_new_frame)
+
+        self.cameraThread.frame_ready.connect(self.on_frame_ready)
+        self.cameraThread.threshold_ready.connect(self.on_threshold_ready)
+        self.cameraThread.centroid_ready.connect(self.on_centroid_ready)
 
         self.camera_thread.start()
 
 
+    @Slot(object)
+    def on_frame_ready(self, frame):
+        self.frame_h, self.frame_w, _ = frame.shape
+
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = frame_rgb.shape
+
+        qimg = QImage(frame_rgb.data, w, h, ch * w, QImage.Format_RGB888)
+        pix = QPixmap.fromImage(qimg)
+
+        self.image_label.setPixmap(
+            pix.scaled(
+                self.image_label.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+        )
+
+    
+    @Slot(tuple, float, float)
+    def on_centroid_ready(self, centroid, error_x, error_y):
+        if centroid is None:
+            return
+
+        t = time.time() - self.start_time
+
+        self.error_time.append(t)
+        self.error_x_data.append(error_x)
+        self.error_y_data.append(error_y)
+
+        # limit 20 s
+        while self.error_time and t - self.error_time[0] > 20:
+            self.error_time.pop(0)
+            self.error_x_data.pop(0)
+            self.error_y_data.pop(0)
+  
 
 
+    @Slot(object)
+    def on_threshold_ready(self, threshold):
+        if threshold is None:
+            self.threshold_image.setPixmap(QPixmap())
+            return
+        th = np.ascontiguousarray(threshold)
 
+        h, w = th.shape
+        qimg = QImage(
+            th.data,
+            w,
+            h,
+            w,
+            QImage.Format_Grayscale8
+        ).copy()
+
+        pix = QPixmap.fromImage(qimg)
+
+        self.threshold_image.setPixmap(
+            pix.scaled(
+                self.threshold_image.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+        )
+
+    
     def on_image_click(self, event):
         if self.image_label.pixmap() is None:
             return
@@ -553,132 +613,171 @@ class DemoUI(QWidget):
         if not (x_off <= x <= x_off + pw and y_off <= y <= y_off + ph):
             return
 
-        # przeliczenie do współrzędnych oryginalnej klatki
-        fx = (x - x_off) * self.frame_w / pw
-        fy = (y - y_off) * self.frame_h / ph
+        try:
+            # przeliczenie do współrzędnych oryginalnej klatki
+            fx = (x - x_off) * self.frame_w / pw
+            fy = (y - y_off) * self.frame_h / ph
 
-        self.target_pos = (int(fx), int(fy))
-        self.tracking_enabled = True
+            self.target_pos = (int(fx), int(fy))
+            self.tracking_enabled = True
 
-        print("Wybrano punkt:", self.target_pos)
-
-    @Slot(object)
-    def on_new_frame(self, frame):
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        self.frame_h, self.frame_w, _ = frame.shape
-
-        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-
-        centroid = self.tracker.track_in_roi(
-            frame, gray, self.tracking_enabled,
-            self.target_pos, self.roi_size
-        )
-
-        if centroid is not None:
-            self.target_pos = centroid
-            cx, cy = centroid
-            h, w, _ = frame.shape
-            error_x = (cx - w//2) * self.arcsec / 3600
-            error_y = (h//2 - cy) * self.arcsec / 3600
-            t = time.time() - self.start_time
-
-            self.error_time.append(t)
-            self.error_x_data.append(error_x)
-            self.error_y_data.append(error_y)
-
-            # ograniczamy do ostatnich 20 sekund
-            while self.error_time and t - self.error_time[0] > 20:
-                self.error_time.pop(0)
-                self.error_x_data.pop(0)
-                self.error_y_data.pop(0)
-
-            self.plotter.update(
-                self.error_x,
-                self.error_y,
-                self.error_time,
-                self.error_x_data,
-                self.error_y_data
-            )
-        frame = self.overlay.apply_overlay(
-            frame, centroid, self.roi_size,
-            self.roi_mark_size,
-            self.roi_mark_combo.currentData(),
-            self.mark_check.isChecked(),
-            self.roi_box_check.isChecked()
-            )
-
-        
-    # --- wykres ---
-        
-
-        if self.tracker.last_threshold is not None:
-            th = self.tracker.last_threshold
-
-            th_rgb = cv2.cvtColor(th, cv2.COLOR_GRAY2RGB)
-            th_rgb = np.ascontiguousarray(th_rgb)
-
-            rh, rw, _ = th_rgb.shape
-            bytes_per_line = 3 * rw
-
-            qimg_roi = QImage(
-                th_rgb.data,
-                rw,
-                rh,
-                bytes_per_line,
-                QImage.Format_RGB888
-            )
-
-            qimg_roi = qimg_roi.copy()  # bardzo ważne!
-
-            pix = QPixmap.fromImage(qimg_roi)
-
-            self.threshold_image.setPixmap(
-                pix.scaled(
-                    self.threshold_image.size(),
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation
+            # PRZEKAŻ DO CAMERA THREAD
+            if hasattr(self, 'cameraThread'):
+                self.cameraThread.set_tracking_params(
+                    enabled=self.tracking_enabled,
+                    target_pos=self.target_pos,
+                    roi_size=self.roi_size,
+                    arcsec=self.arcsec
                 )
-            )
-        else:
-            self.threshold_image.setPixmap(QPixmap())
 
-        # QImage
-        h, w, ch = frame.shape
-        qimg = QImage(frame.data, w, h, ch*w, QImage.Format_RGB888)
-        pix = QPixmap.fromImage(qimg)
-
-        self.image_label.setPixmap(
-            pix.scaled(
-                self.image_label.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
+            print("Wybrano punkt:", self.target_pos)
+        except AttributeError:
+            print("Błąd: frame_w lub frame_h nie jest zdefiniowane")
+    
+    
+    # Gdy zmieniasz overlay:
+    def update_overlay_params(self):
+        self.cameraThread.set_overlay_params(
+            roi_mark_size=self.roi_mark_size,
+            mark_type=self.roi_mark_combo.currentData(),
+            center_mark=self.mark_check.isChecked(),
+            roi_mark=self.roi_box_check.isChecked()
         )
 
 
-class cameraThread(QObject):
-    frame_ready = Signal(object)
-    def __init__(self, cam_index=5, width=1920, height=1080):
+
+class CameraThread(QObject):
+    frame_ready = Signal(object)              # frame z overlay
+    threshold_ready = Signal(object)          # threshold ROI
+    centroid_ready = Signal(tuple, float, float)  # centroid, err_x, err_y
+    res_signal = Signal(int, int)
+
+    def __init__(self, cam_index=0, width=1920, height=1080):
         super().__init__()
+
         self.running = False
+
         self.cap = cv2.VideoCapture(cam_index)
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
+        # logika wątku
+        self.tracker = tracker()
+        self.overlay = OverlayRenderer()
+
+        # parametry z GUI
+        self.tracking_enabled = False
+        self.target_pos = None
+        self.roi_size = 200
+        self.arcsec = 1.0
+
+        self.roi_mark_size = 20
+        self.mark_type = cv2.MARKER_CROSS
+        self.center_mark = True
+        self.roi_mark = True
+
+        self.res_signal.connect(self._change_resolution, Qt.DirectConnection)
+
     @Slot()
     def run(self):
         self.running = True
+
         while self.running:
             ret, frame = self.cap.read()
-            if ret:
-                self.frame_ready.emit(frame)
-            time.sleep(0.001) 
+            if not ret:
+                time.sleep(0.01)
+                continue
+
+            # --- TRACKER (czysty obraz) ---
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            centroid = self.tracker.track_in_roi(
+                frame,
+                gray,
+                self.tracking_enabled,
+                self.target_pos,
+                self.roi_size
+            )
+
+            # --- błąd kątowy ---
+            error_x = error_y = 0.0
+            if centroid is not None:
+                self.target_pos = centroid   # <<< TO JEST KLUCZ
+                h, w = gray.shape
+                error_x = (centroid[0] - w // 2) * self.arcsec / 3600.0
+                error_y = (h // 2 - centroid[1]) * self.arcsec / 3600.0
+                self.centroid_ready.emit(centroid, error_x, error_y)
+
+
+            # --- overlay ---
+            overlay_frame = self.overlay.apply_overlay(
+                frame.copy(),
+                centroid,
+                self.roi_size,
+                self.roi_mark_size,
+                self.mark_type,
+                self.center_mark,
+                self.roi_mark
+            )
+
+            # --- GUI ---
+            self.frame_ready.emit(overlay_frame)
+
+            self.threshold_ready.emit(
+                self.tracker.last_threshold.copy()
+                if self.tracker.last_threshold is not None
+                else None
+            )
+
+            time.sleep(0.001)
+
+    # ================= GUI → THREAD =================
+
+    def set_tracking_params(self, enabled, target_pos, roi_size, arcsec):
+        self.tracking_enabled = enabled
+        self.target_pos = target_pos
+        self.roi_size = roi_size
+        self.arcsec = arcsec
+
+
+    def set_roi_size(self, roi_size):
+        self.roi_size = roi_size
+    def set_overlay_params(self, roi_mark_size, mark_type, center_mark, roi_mark):
+        self.roi_mark_size = roi_mark_size
+        self.mark_type = mark_type
+        self.center_mark = center_mark
+        self.roi_mark = roi_mark
+
+    def change_exposure(self, value):
+        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+        self.cap.set(cv2.CAP_PROP_EXPOSURE, value)
+
+    def change_brightness(self, value):
+        self.cap.set(cv2.CAP_PROP_BRIGHTNESS, value)
+
+    def change_contrast(self, value):
+        self.cap.set(cv2.CAP_PROP_CONTRAST, value)
+
+    def change_saturation(self, value):
+        self.cap.set(cv2.CAP_PROP_SATURATION, value)
+
+    @Slot(int, int)
+    def _change_resolution(self, w, h):
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
 
     def stop(self):
         self.running = False
-        self.cap.release()
+        if self.cap.isOpened():
+            self.cap.release()
+
+
+
+    
+
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

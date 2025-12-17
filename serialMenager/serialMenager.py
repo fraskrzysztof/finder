@@ -1,4 +1,5 @@
 import serial
+import serial.tools.list_ports
 
 class serialMenager:
     def __init__(self):

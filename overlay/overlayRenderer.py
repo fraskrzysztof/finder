@@ -14,10 +14,10 @@ class OverlayRenderer:
         cv2.drawMarker(
             frame,
             (cx, cy),
-            (255, 0, 0),
+            (0, 0, 255),
             markerType=marker,
             markerSize=size,
-            thickness=1
+            thickness=2
         )
 
  
@@ -30,7 +30,7 @@ class OverlayRenderer:
         
         h, w, _ = frame.shape
         cx, cy = centroid
-        cv2.line(frame, (cx,cy), (w // 2, h //2), (0, 255, 255), 1)
+        cv2.line(frame, (cx,cy), (w // 2, h //2), (255, 255, 0), 1)
 
         return frame
     
@@ -38,15 +38,15 @@ class OverlayRenderer:
         h, w, _ = frame.shape
         cx, cy = w // 2, h // 2
 
-
-        cv2.drawMarker(
-            frame,
-            (cx, cy),
-            (0, 255, 0),
-            markerType=cv2.MARKER_DIAMOND,
-            markerSize=40,
-            thickness=2
-        )
+        cv2.circle(frame, (cx, cy), radius=40, color=(0, 255, 0), thickness=2)
+        # cv2.drawMarker(
+        #     frame,
+        #     (cx, cy),
+        #     (0, 255, 0),
+        #     markerType=cv2.MARKER_DIAMOND,
+        #     markerSize=40,
+        #     thickness=2
+        # )
 
         # cienkie pełne linie
         cv2.line(frame, (0, cy), (w, cy), (120, 255, 0), 1)
