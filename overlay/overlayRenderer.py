@@ -38,16 +38,14 @@ class OverlayRenderer:
         h, w, _ = frame.shape
         cx, cy = w // 2, h // 2
 
-        cv2.circle(frame, (cx, cy), radius=40, color=(0, 255, 0), thickness=2)
-        # cv2.drawMarker(
-        #     frame,
-        #     (cx, cy),
-        #     (0, 255, 0),
-        #     markerType=cv2.MARKER_DIAMOND,
-        #     markerSize=40,
-        #     thickness=2
-        # )
+        # cv2.circle(frame, (cx, cy), radius=40, color=(0, 255, 0), thickness=2)
+        # cv2.circle(frame, (cx, cy), radius=120, color=(0, 255, 0), thickness=1)
+        # cv2.circle(frame, (cx, cy), radius=200, color=(0, 255, 0), thickness=1)
+        # cv2.circle(frame, (cx, cy), radius=280, color=(0, 255, 0), thickness=1)
 
+        # cv2.putText(frame,'15"', (cx+120,cy), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0))
+        # cv2.putText(frame,'30"', (cx+200,cy), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0))
+        # cv2.putText(frame,'45"', (cx+280,cy), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0))
         # cienkie pełne linie
         cv2.line(frame, (0, cy), (w, cy), (120, 255, 0), 1)
         cv2.line(frame, (cx, 0), (cx, h), (120, 255, 0), 1)
@@ -59,7 +57,7 @@ class OverlayRenderer:
             return frame
         h, w, _ = frame.shape
         cx, cy = centroid
-        cv2. rectangle(frame, (cx-roi_size//2, cy+roi_size//2), (cx+roi_size//2, cy-roi_size//2), (0,255,0), 1)
+        cv2.rectangle(frame, (cx-roi_size//2, cy-roi_size//2), (cx+roi_size//2, cy+roi_size//2), (0,255,0), 2)
 
         return frame
 

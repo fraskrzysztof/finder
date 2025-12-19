@@ -31,7 +31,7 @@ def detect_cameras():
             cap.release()
     return available
 
-class DemoUI(QWidget):
+class main(QWidget):
     def __init__(self):
         super().__init__()
 
@@ -277,6 +277,46 @@ class DemoUI(QWidget):
         com_buttons.addWidget(self.btn_open)
         com_buttons.addWidget(self.btn_close)
         com_tab_layout.addLayout(com_buttons)
+
+        self.com_status_frame = QFrame()
+        self.com_status_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
+        self.com_status_frame.setLineWidth(2)
+
+        com_status_frame_layout = QVBoxLayout()
+        com_status_line_layout = QHBoxLayout()
+        com_status_line_layout.addWidget(QLabel("status: "))
+        self.com_status_label = QLabel("CLOSED")
+        self.com_status_label.setStyleSheet("color: red;")
+        self.com_status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        com_status_line_layout.addWidget(self.com_status_label)
+
+        com_tracking_line_layout = QHBoxLayout()
+        com_tracking_line_layout.addWidget(QLabel("tracking: "))
+        self.com_tracking_label = QLabel("INACTIVE")
+        self.com_tracking_label.setStyleSheet("color: red;")
+        self.com_tracking_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        com_tracking_line_layout.addWidget(self.com_tracking_label)
+
+        com_motor_line_layout = QHBoxLayout()
+        com_motor_line_layout.addWidget(QLabel("motor status: "))
+        self.com_motor_label = QLabel("DISABLED")
+        self.com_motor_label.setStyleSheet("color: red;")
+        self.com_motor_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        com_motor_line_layout.addWidget(self.com_motor_label)
+
+
+        self.manual_mode_check = QCheckBox("manual mode")
+        self.manual_mode_check.setChecked(True)
+        com_status_frame_layout.addLayout(com_status_line_layout)
+        com_status_frame_layout.addLayout(com_tracking_line_layout)
+        com_status_frame_layout.addLayout(com_motor_line_layout)
+        com_status_frame_layout.addWidget(self.manual_mode_check)
+        self.com_status_frame.setLayout(com_status_frame_layout)
+        com_tab_layout.addWidget(self.com_status_frame)
+
+
+
+
         com_tab_layout.addStretch()
         com_tab.setLayout(com_tab_layout)
         self.com_tabs.addTab(com_tab, "com tab")
@@ -411,8 +451,9 @@ class DemoUI(QWidget):
         self.stop_camera_thread()
         cameras = detect_cameras()
         self.camera_combo.clear()
+        self.camera_combo.addItem("choose camera")
         for cam in cameras:
-            self.camera_combo.addItem(f"camera {cam}", cam)
+            self.camera_combo.addItem(f"{cam}", cam)
 
 
     def on_ref_ports(self):
@@ -453,9 +494,14 @@ class DemoUI(QWidget):
     def on_open(self):
         text = int(self.baudrate.text())
         self.serialMenager.open_serial_port(self.port,text)
+        self.com_status_label.setText("OPEN")
+        self.com_status_label.setStyleSheet("color: green;")
+
 
     def on_close(self):
         self.serialMenager.close_serial_port()
+        self.com_status_label.setText("CLOSED")
+        self.com_status_label.setStyleSheet("color: red;")
         
     def change_roi(self, value):
         self.roi_size = value
@@ -555,6 +601,7 @@ class DemoUI(QWidget):
         self.error_time.append(t)
         self.error_x_data.append(error_x)
         self.error_y_data.append(error_y)
+        # self.serialMenager.serial_send(error_x, error_y)
 
         # limit 20 s
         while self.error_time and t - self.error_time[0] > 20:
@@ -781,7 +828,7 @@ class CameraThread(QObject):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = DemoUI()
+    window = main()
     window.show()
     sys.exit(app.exec())
 
