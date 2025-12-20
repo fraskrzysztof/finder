@@ -601,7 +601,7 @@ class main(QWidget):
         self.error_time.append(t)
         self.error_x_data.append(error_x)
         self.error_y_data.append(error_y)
-        # self.serialMenager.serial_send(error_x, error_y)
+        self.serialMenager.serial_send_error(error_x, error_y)
 
         # limit 20 s
         while self.error_time and t - self.error_time[0] > 20:

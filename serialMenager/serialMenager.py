@@ -46,7 +46,25 @@ class serialMenager:
                 print(f"[SerialMenager] Error closing port: {e}")
         self.ser = None
 
-    def serial_send(self, data_a, data_b, precision = 3):
+
+    def serial_send_mode(self, data):
+        if not self.ser or not self.ser.is_open:
+            return False
+        
+        try:
+            data = data
+            data = data.encode('utf-8')
+            self.ser.write(data)
+            # response = self.ser.readline().decode('utf-8').strip()
+            # print("Odpowiedź z ESP32:", response)
+            return True
+        except Exception as e:
+            print(f"[SerialMenager] Error sending mode_data: {e}")
+            return False
+
+
+
+    def serial_send_error(self, data_a, data_b, precision = 3):
         if not self.ser or not self.ser.is_open:
             return False
         
@@ -54,9 +72,9 @@ class serialMenager:
             data = f"{data_a:.{precision}f} {data_b:.{precision}f}\n"
             data = data.encode('utf-8')
             self.ser.write(data)
-            response = self.ser.readline().decode('utf-8').strip()
-            print("Odpowiedź z ESP32:", response)
+            # response = self.ser.readline().decode('utf-8').strip()
+            # print("Odpowiedź z ESP32:", response)
             return True
         except Exception as e:
-            print(f"[SerialMenager] Error sending data: {e}")
+            print(f"[SerialMenager] Error sending error data: {e}")
             return False
