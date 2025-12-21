@@ -315,11 +315,62 @@ class main(QWidget):
         com_tab_layout.addWidget(self.com_status_frame)
 
 
+        shutter_tab = QWidget()
+        shutter_tab_layout = QVBoxLayout()
+        shutter_tab_layout.addWidget(QLabel("Select port:"))
+        shutter_tab.setLayout(shutter_tab_layout)
+        self.shutterRls = QLineEdit()
+        self.shutterRls.setText("100")
+        self.rlsTime = QLineEdit()
+        self.rlsTime.setText("5")
+        self.rlsFreq = QLineEdit()
+        self.rlsFreq.setText("10")
+        shutter_tab_layout.addWidget(QLabel("shutter releases:"))
+        shutter_tab_layout.addWidget(self.shutterRls)
+        shutter_tab_layout.addWidget(QLabel("exposure time [s]:"))
+        shutter_tab_layout.addWidget(self.rlsTime)
+        shutter_tab_layout.addWidget(QLabel("releases frequency [s]:"))
+        shutter_tab_layout.addWidget(self.rlsFreq)
+        shutter_buttons =QHBoxLayout()
+        self.btn_sht_start = QPushButton("start")
+        self.btn_sht_stop = QPushButton("stop")
+        shutter_buttons.addWidget(self.btn_sht_start)
+        shutter_buttons.addWidget(self.btn_sht_stop)
+        shutter_tab_layout.addLayout(shutter_buttons)
 
+        self.shutter_status_frame = QFrame()
+        self.shutter_status_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
+        self.shutter_status_frame.setLineWidth(2)
+        
+        # shutter_status_frame_layout = QVBoxLayout()
+        # com_status_line_layout = QHBoxLayout()
+        # com_status_line_layout.addWidget(QLabel("status: "))
+        # self.com_status_label = QLabel("CLOSED")
+        # self.com_status_label.setStyleSheet("color: red;")
+        # self.com_status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        # com_status_line_layout.addWidget(self.com_status_label)
+
+        # com_tracking_line_layout = QHBoxLayout()
+        # com_tracking_line_layout.addWidget(QLabel("tracking: "))
+        # self.com_tracking_label = QLabel("INACTIVE")
+        # self.com_tracking_label.setStyleSheet("color: red;")
+        # self.com_tracking_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        # com_tracking_line_layout.addWidget(self.com_tracking_label)
+
+        # com_motor_line_layout = QHBoxLayout()
+        # com_motor_line_layout.addWidget(QLabel("motor status: "))
+        # self.com_motor_label = QLabel("DISABLED")
+        # self.com_motor_label.setStyleSheet("color: red;")
+        # self.com_motor_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        # com_motor_line_layout.addWidget(self.com_motor_label)
+        # self.shutter_status_frame.setLayout(shutter_status_frame_layout)
+        # shutter_tab_layout.addWidget(self.shutter_status_frame)
 
         com_tab_layout.addStretch()
+        shutter_tab_layout.addStretch()
         com_tab.setLayout(com_tab_layout)
         self.com_tabs.addTab(com_tab, "com tab")
+        self.com_tabs.addTab(shutter_tab, "remote shutter")
 
         left_layout.addWidget(self.tabs)
         left_layout.addWidget(self.com_tabs)
@@ -431,13 +482,22 @@ class main(QWidget):
         self.btn_close.clicked.connect(self.on_close)
         self.btn_ref_ports.clicked.connect(self.on_ref_ports)
         self.btn_ref_camera.clicked.connect(self.on_ref_cameras)
-
         self.roi_box_check.stateChanged.connect(self.update_overlay_params)
         self.mark_check.stateChanged.connect(self.update_overlay_params)
         self.roi_mark_combo.currentIndexChanged.connect(self.update_overlay_params)
-
+        self.btn_sht_start.clicked.connect(self.on_start_exposure)
+        self.btn_sht_stop.clicked.connect(self.on_stop_exposure)
 
     # ===  ===
+
+    def on_start_exposure(self):
+        shutterCnt = int(self.shutterRls.text())
+        expTime = int(self.rlsTime.text())
+        rlsFreq = int(self.rlsFreq.text())
+        print("exposure started")
+
+    def on_stop_exposure(self):
+        print("exposure stopped")
 
     def stop_camera_thread(self):
         if hasattr(self, "cameraThread") and self.cameraThread is not None:
