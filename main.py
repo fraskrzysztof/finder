@@ -20,6 +20,7 @@ from serialMenager.serialMenager import serialMenager
 from tracker.tracker import tracker
 from plotter.plotter import plotter
 from cameraThread.cameraThread import CameraThread
+from shutterThread.shutterThread import shutterThread
 
 def detect_cameras():
     devices = glob.glob('/dev/video*')
@@ -44,6 +45,7 @@ class main(QWidget):
         self.tracker = tracker()
         self.serialMenager = serialMenager()
         self.cameraThread =  CameraThread()
+        self.shutterThread = shutterThread()
 
         # ===================
         # WINDOW SETTINGS
@@ -317,7 +319,6 @@ class main(QWidget):
 
         shutter_tab = QWidget()
         shutter_tab_layout = QVBoxLayout()
-        shutter_tab_layout.addWidget(QLabel("Select port:"))
         shutter_tab.setLayout(shutter_tab_layout)
         self.shutterRls = QLineEdit()
         self.shutterRls.setText("100")
@@ -325,11 +326,11 @@ class main(QWidget):
         self.rlsTime.setText("5")
         self.rlsFreq = QLineEdit()
         self.rlsFreq.setText("10")
-        shutter_tab_layout.addWidget(QLabel("shutter releases:"))
+        shutter_tab_layout.addWidget(QLabel("frames:"))
         shutter_tab_layout.addWidget(self.shutterRls)
         shutter_tab_layout.addWidget(QLabel("exposure time [s]:"))
         shutter_tab_layout.addWidget(self.rlsTime)
-        shutter_tab_layout.addWidget(QLabel("releases frequency [s]:"))
+        shutter_tab_layout.addWidget(QLabel("release frequency [s]:"))
         shutter_tab_layout.addWidget(self.rlsFreq)
         shutter_buttons =QHBoxLayout()
         self.btn_sht_start = QPushButton("start")
@@ -342,29 +343,30 @@ class main(QWidget):
         self.shutter_status_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
         self.shutter_status_frame.setLineWidth(2)
         
-        # shutter_status_frame_layout = QVBoxLayout()
-        # com_status_line_layout = QHBoxLayout()
-        # com_status_line_layout.addWidget(QLabel("status: "))
-        # self.com_status_label = QLabel("CLOSED")
-        # self.com_status_label.setStyleSheet("color: red;")
-        # self.com_status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        # com_status_line_layout.addWidget(self.com_status_label)
+        shutter_status_frame_layout = QVBoxLayout()
+        releases_cnt_line_layout = QHBoxLayout()
+        releases_cnt_line_layout.addWidget(QLabel("frames: "))
+        self.rlscnt_label = QLabel("0")
+        self.rlscnt_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        releases_cnt_line_layout.addWidget(self.rlscnt_label)
 
-        # com_tracking_line_layout = QHBoxLayout()
-        # com_tracking_line_layout.addWidget(QLabel("tracking: "))
-        # self.com_tracking_label = QLabel("INACTIVE")
-        # self.com_tracking_label.setStyleSheet("color: red;")
-        # self.com_tracking_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        # com_tracking_line_layout.addWidget(self.com_tracking_label)
+        current_time_line_layout = QHBoxLayout()
+        current_time_line_layout.addWidget(QLabel("elapsed: "))
+        self.ctime_label = QLabel("00:00:00")
+        self.ctime_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        current_time_line_layout.addWidget(self.ctime_label)
 
-        # com_motor_line_layout = QHBoxLayout()
-        # com_motor_line_layout.addWidget(QLabel("motor status: "))
-        # self.com_motor_label = QLabel("DISABLED")
-        # self.com_motor_label.setStyleSheet("color: red;")
-        # self.com_motor_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        # com_motor_line_layout.addWidget(self.com_motor_label)
-        # self.shutter_status_frame.setLayout(shutter_status_frame_layout)
-        # shutter_tab_layout.addWidget(self.shutter_status_frame)
+        to_end_line_layout = QHBoxLayout()
+        to_end_line_layout.addWidget(QLabel("remaining: "))
+        self.to_end_label = QLabel("00:00:00")
+        self.to_end_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        to_end_line_layout.addWidget(self.to_end_label)
+        self.shutter_status_frame.setLayout(shutter_status_frame_layout)
+        shutter_tab_layout.addWidget(self.shutter_status_frame)
+
+        shutter_status_frame_layout.addLayout(releases_cnt_line_layout)
+        shutter_status_frame_layout.addLayout(current_time_line_layout)
+        shutter_status_frame_layout.addLayout(to_end_line_layout)
 
         com_tab_layout.addStretch()
         shutter_tab_layout.addStretch()
@@ -492,12 +494,34 @@ class main(QWidget):
 
     def on_start_exposure(self):
         shutterCnt = int(self.shutterRls.text())
-        expTime = int(self.rlsTime.text())
-        rlsFreq = int(self.rlsFreq.text())
-        print("exposure started")
+        expTime = float(self.rlsTime.text())
+        rlsFreq = float(self.rlsFreq.text())
+        self.shutter_thread = QThread()
+        self.shutterThread =shutterThread()
+        self.shutterThread.moveToThread(self.shutter_thread)
+        self.shutterThread.progress.connect(self.shutter_status_update)
+        self.shutterThread.finished.connect(self.shutter_thread.quit)
+        self.shutter_thread.started.connect(
+            lambda: self.shutterThread.start_data.emit(
+                shutterCnt, expTime, rlsFreq
+            )
+        )
+        
+        self.shutter_thread.start()
+
+    def shutter_status_update(self, frames, elapsed, remaining):
+        self.rlscnt_label.setText(f"{frames}")
+        self.ctime_label.setText(f"{int(elapsed)//3600:02d}:{int(elapsed)%3600//60:02d}:{int(elapsed)%60:02d}")
+        self.to_end_label.setText(f"{int(remaining)//3600:02d}:{int(remaining)%3600//60:02d}:{int(remaining)%60:02d}")
+
 
     def on_stop_exposure(self):
-        print("exposure stopped")
+        # if hasattr(self, "shutterThread") and self.shutterThread is not None:
+        #     self.shutterThread.stop()  
+        #     if hasattr(self, "shutter_thread"):
+        #         self.shutter_thread.quit()
+        #         self.shutter_thread.wait()
+        pass
 
     def stop_camera_thread(self):
         if hasattr(self, "cameraThread") and self.cameraThread is not None:
