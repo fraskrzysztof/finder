@@ -15,17 +15,16 @@ class shutterThread(QObject):
         super().__init__()
         self._running = False
         self.start_data.connect(self.start)
-        self.serialMenager = serialMenager()
+
 
     def stop(self):
-        print("remote shutter stopped")
         if self._running == True:
             self._running = False
         return 0
 
     @Slot(int, float, float)
     def start(self, frames, expTime, rlsFreq):
-        print(frames, expTime, rlsFreq)
+        self.serialMenager = serialMenager()
         self._running = True
         start_time = time.time()
         current_frames = 0
@@ -35,7 +34,8 @@ class shutterThread(QObject):
             elapsed = now - start_time
             remaining = predicted_time - elapsed
 
-            self.serialMenager.serial_send_mode(f"shutter {expTime}\n")
+            self.serialMenager.send_shutter.emit(f"S{expTime}\n")
+            print(f"S{expTime}\n")
 
             current_frames += 1
             self.progress.emit(current_frames, round(elapsed, 2), round(remaining, 2))

@@ -1,80 +1,56 @@
 import serial
 import serial.tools.list_ports
+from PySide6.QtCore import Slot, Signal, QObject
 
-class serialMenager:
+class serialMenager(QObject):
+    open_port = Signal(str, int)
+    close_port = Signal()
+    send_shutter = Signal(str)
+    send_error = Signal(float, float)
+    status = Signal(str)
+
     def __init__(self):
-        
+        super().__init__()
         self.ser = None
 
-    def detect_serial_ports(self):
+        self.open_port.connect(self._open_port)
+        self.close_port.connect(self._close_port)
+        self.send_shutter.connect(self._send_shutter)
+        self.send_error.connect(self._send_error)
 
-        ports = serial.tools.list_ports.comports()
-        available = []
-
-        accepted_keywords = [
-            "USB", "UART", "ACM", "CH340", "CH910",
-            "CP210", "FTDI", "FT232", "Arduino",
-            "STM", "ESP", "Silicon Labs"
-        ]
-
-        for port in ports:
-            desc = port.description.upper()
-            if any(keyword in desc for keyword in accepted_keywords):
-                available.append((port.device, port.description))
-
-        return available
-
-    def open_serial_port(self, port, brate=115200):
-        if self.ser is not None:
-            self.ser.close()
-       
+    @Slot(str, int)
+    def _open_port(self, port, baud):
+        self._close_port()
         try:
-            self.ser = serial.Serial(port, baudrate = brate, timeout = 1)
-            print("port opened")
-            return True 
+            self.ser = serial.Serial(port, baud, timeout=0)
+            self.status.emit(f"Opened {port}")
         except Exception as e:
-            print(f"[SerialManager] Error opening port: {e}")
             self.ser = None
-            return False
-        
+            self.status.emit(f"Open failed: {e}")
 
-    def close_serial_port(self):
-        if self.ser and not self.ser.is_open:
+    @Slot()
+    def _close_port(self):
+        if self.ser:
             try:
                 self.ser.close()
-            except Exception as e:
-                print(f"[SerialMenager] Error closing port: {e}")
-        self.ser = None
+            except:
+                pass
+            self.ser = None
+            self.status.emit("Port closed")
 
-
-    def serial_send_mode(self, data):
+    def _write(self, data):
         if not self.ser or not self.ser.is_open:
-            return False
-        
+            return
         try:
-            data = data
-            data = data.encode('utf-8')
-            self.ser.write(data)
-            # response = self.ser.readline().decode('utf-8').strip()
-            # print("Odpowiedź z ESP32:", response)
-            return True
+            self.ser.write(data.encode())
+            self.ser.flush()
         except Exception as e:
-            print(f"[SerialMenager] Error sending mode_data: {e}")
-            return False
+            self.status.emit(f"Write error: {e}")
 
+    @Slot(str)
+    def _send_shutter(self, cmd):
+        self._write(cmd)
 
-
-    def serial_send_error(self, data_a, data_b, precision = 3):
-        if not self.ser or not self.ser.is_open:
-            return False
-        
-        try:
-            data = f"{data_a:.{precision}f} {data_b:.{precision}f}\n"
-            data = data.encode('utf-8')
-            self.ser.write(data)
-            # response = self.ser.readline().decode('utf-8').strip()
-            # print("Odpowiedź z ESP32:", response)
-            return True
-        except Exception as e:
-            print(f"[SerialMenager] Error sending error data: {e}")
-            return False
+    @Slot(float, float)
+    def _send_error(self, a, b):
+        self._write(f"{a:.3f} {b:.3f}\n")

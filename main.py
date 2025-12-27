@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 import numpy as np
-
+import serial.tools.list_ports
 
 from PySide6.QtCore import Qt, QTimer, QThread, Slot
 from PySide6.QtGui import QImage, QPixmap
@@ -21,6 +21,23 @@ from tracker.tracker import tracker
 from plotter.plotter import plotter
 from cameraThread.cameraThread import CameraThread
 from shutterThread.shutterThread import shutterThread
+
+def detect_serial_ports():
+    ports = serial.tools.list_ports.comports()
+    available = []
+
+    accepted_keywords = [
+        "USB", "UART", "ACM", "CH340", "CH910",
+        "CP210", "FTDI", "FT232", "Arduino",
+        "STM", "ESP", "Silicon Labs"
+    ]
+
+    for port in ports:
+        desc = port.description.upper()
+        if any(keyword in desc for keyword in accepted_keywords):
+            available.append((port.device, port.description))
+
+    return available
 
 def detect_cameras():
     devices = glob.glob('/dev/video*')
@@ -43,7 +60,12 @@ class main(QWidget):
         self.overlay = OverlayRenderer()
         self.plotter = plotter()
         self.tracker = tracker()
+
+        self.serial_thread = QThread()
         self.serialMenager = serialMenager()
+        self.serialMenager.moveToThread(self.serial_thread)
+        self.serial_thread.start()
+
         self.cameraThread =  CameraThread()
         self.shutterThread = shutterThread()
 
@@ -252,7 +274,7 @@ class main(QWidget):
 
         self.baudrate = QLineEdit()
         self.baudrate.setText("115200")
-        ports = self.serialMenager.detect_serial_ports()
+        ports = detect_serial_ports()
         for device, desc in ports:
             self.serial_combo.addItem(f"{device}  ({desc})", device)
 
@@ -335,6 +357,8 @@ class main(QWidget):
         shutter_buttons =QHBoxLayout()
         self.btn_sht_start = QPushButton("start")
         self.btn_sht_stop = QPushButton("stop")
+        self.btn_sht_start.setEnabled(False)
+        self.btn_sht_stop.setEnabled(False)
         shutter_buttons.addWidget(self.btn_sht_start)
         shutter_buttons.addWidget(self.btn_sht_stop)
         shutter_tab_layout.addLayout(shutter_buttons)
@@ -493,6 +517,13 @@ class main(QWidget):
     # ===  ===
 
     def on_start_exposure(self):
+        
+        if hasattr(self, "shutter_thread") and hasattr(self, "shutterThread"):
+            self.shutterThread.stop()
+            self.shutter_thread.quit()
+            self.shutter_thread.wait()
+        
+        
         shutterCnt = int(self.shutterRls.text())
         expTime = float(self.rlsTime.text())
         rlsFreq = float(self.rlsFreq.text())
@@ -520,6 +551,8 @@ class main(QWidget):
         # self.rlscnt_label.setText("0")
         # self.ctime_label.setText("00:00:00")
         # self.to_end_label.setText("00:00:00")
+
+        
         
 
     def stop_camera_thread(self):
@@ -540,7 +573,7 @@ class main(QWidget):
 
 
     def on_ref_ports(self):
-        ports = self.serialMenager.detect_serial_ports()
+        ports = detect_serial_ports()
         self.serial_combo.clear()
         self.serial_combo.addItem("select port")
         for device, desc in ports:
@@ -576,15 +609,23 @@ class main(QWidget):
 
     def on_open(self):
         text = int(self.baudrate.text())
-        self.serialMenager.open_serial_port(self.port,text)
+        self.serialMenager.open_port.emit(self.port,text)
         self.com_status_label.setText("OPEN")
         self.com_status_label.setStyleSheet("color: green;")
 
+        #PRZYCISKI W SHUTTER ENABLE
+        self.btn_sht_start.setEnabled(True)
+        self.btn_sht_stop.setEnabled(True)
+
 
     def on_close(self):
-        self.serialMenager.close_serial_port()
+        self.serialMenager.close_port.emit()
         self.com_status_label.setText("CLOSED")
         self.com_status_label.setStyleSheet("color: red;")
+        
+        #przyciski w shutter disable
+        self.btn_sht_start.setEnabled(False)
+        self.btn_sht_stop.setEnabled(False)
         
     def change_roi(self, value):
         self.roi_size = value
@@ -684,7 +725,7 @@ class main(QWidget):
         self.error_time.append(t)
         self.error_x_data.append(error_x)
         self.error_y_data.append(error_y)
-        self.serialMenager.serial_send_error(error_x, error_y)
+        self.serialMenager.send_error.emit(error_x, error_y)
 
         # limit 20 s
         while self.error_time and t - self.error_time[0] > 20:
@@ -739,19 +780,17 @@ class main(QWidget):
         x_off = (lw - pw) // 2
         y_off = (lh - ph) // 2
 
-        # sprawdzenie, czy kliknięto w obraz
         if not (x_off <= x <= x_off + pw and y_off <= y <= y_off + ph):
             return
 
         try:
-            # przeliczenie do współrzędnych oryginalnej klatki
+
             fx = (x - x_off) * self.frame_w / pw
             fy = (y - y_off) * self.frame_h / ph
 
             self.target_pos = (int(fx), int(fy))
             self.tracking_enabled = True
 
-            # PRZEKAŻ DO CAMERA THREAD
             if hasattr(self, 'cameraThread'):
                 self.cameraThread.set_tracking_params(
                     enabled=self.tracking_enabled,
@@ -762,8 +801,6 @@ class main(QWidget):
         except AttributeError:
             print("Błąd: frame_w lub frame_h nie jest zdefiniowane")
     
-    
-    # Gdy zmieniasz overlay:
     def update_overlay_params(self):
         self.cameraThread.set_overlay_params(
             roi_mark_size=self.roi_mark_size,
