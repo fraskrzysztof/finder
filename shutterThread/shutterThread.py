@@ -17,6 +17,12 @@ class shutterThread(QObject):
         self.start_data.connect(self.start)
         self.serialMenager = serialMenager()
 
+    def stop(self):
+        print("remote shutter stopped")
+        if self._running == True:
+            self._running = False
+        return 0
+
     @Slot(int, float, float)
     def start(self, frames, expTime, rlsFreq):
         print(frames, expTime, rlsFreq)
@@ -41,7 +47,3 @@ class shutterThread(QObject):
 
         self.finished.emit()
 
-
-    def stop(self):
-        print("remote shutter stopped")
-        return 0

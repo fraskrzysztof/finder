@@ -59,18 +59,15 @@ class CameraThread(QObject):
                 self.roi_size
             )
 
-            # --- błąd kątowy ---
             error_x = error_y = 0.0
             if centroid is not None:
-                self.target_pos = centroid   # <<< TO JEST KLUCZ
+                self.target_pos = centroid  
                 h, w = gray.shape
                 error_x = (centroid[0] - w // 2) * self.arcsec / 3600.0
                 error_y = (h // 2 - centroid[1]) * self.arcsec / 3600.0
                 self.centroid_ready.emit(centroid, error_x, error_y)
                 
 
-
-            # --- overlay ---
             overlay_frame = self.overlay.apply_overlay(
                 frame.copy(),
                 centroid,
@@ -81,7 +78,6 @@ class CameraThread(QObject):
                 self.roi_mark
             )
 
-            # --- GUI ---
             self.frame_ready.emit(overlay_frame)
 
             self.threshold_ready.emit(

@@ -516,12 +516,11 @@ class main(QWidget):
 
 
     def on_stop_exposure(self):
-        # if hasattr(self, "shutterThread") and self.shutterThread is not None:
-        #     self.shutterThread.stop()  
-        #     if hasattr(self, "shutter_thread"):
-        #         self.shutter_thread.quit()
-        #         self.shutter_thread.wait()
-        pass
+        self.shutterThread.stop()
+        # self.rlscnt_label.setText("0")
+        # self.ctime_label.setText("00:00:00")
+        # self.to_end_label.setText("00:00:00")
+        
 
     def stop_camera_thread(self):
         if hasattr(self, "cameraThread") and self.cameraThread is not None:
