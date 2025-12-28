@@ -35,7 +35,6 @@ class shutterThread(QObject):
             remaining = predicted_time - elapsed
 
             self.serialMenager.send_shutter.emit(f"S{expTime}\n")
-            print(f"S{expTime}\n")
 
             current_frames += 1
             self.progress.emit(current_frames, round(elapsed, 2), round(remaining, 2))

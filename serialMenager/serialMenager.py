@@ -22,7 +22,7 @@ class serialMenager(QObject):
     def _open_port(self, port, baud):
         self._close_port()
         try:
-            self.ser = serial.Serial(port, baud, timeout=0)
+            self.ser = serial.Serial(port, baud, timeout=0, write_timeout = 0.1)
             self.status.emit(f"Opened {port}")
         except Exception as e:
             self.ser = None
