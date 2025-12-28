@@ -93,6 +93,7 @@ class main(QWidget):
         self.error_data = []  
         self.error_x_data = []
         self.error_y_data = []
+        self.mode = None
 
         # ===========================================================
         # ===================== INTERFACE ===========================
@@ -302,6 +303,17 @@ class main(QWidget):
         com_buttons.addWidget(self.btn_close)
         com_tab_layout.addLayout(com_buttons)
 
+
+        self.mode_combo = QComboBox()
+        self.mode_combo.clear()
+        self.mode_combo.addItems(["manual", "hold", "tracking"])
+        modes_layout = QHBoxLayout()
+        modes_layout.addWidget(self.mode_combo, stretch= 2)
+        self.btn_mode = QPushButton("select")
+        modes_layout.addWidget(self.btn_mode, stretch=1)
+        com_tab_layout.addWidget(QLabel("control mode:"))
+        com_tab_layout.addLayout(modes_layout)
+
         self.com_status_frame = QFrame()
         self.com_status_frame.setFrameStyle(QFrame.Box | QFrame.Raised)
         self.com_status_frame.setLineWidth(2)
@@ -328,13 +340,9 @@ class main(QWidget):
         self.com_motor_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         com_motor_line_layout.addWidget(self.com_motor_label)
 
-
-        self.manual_mode_check = QCheckBox("manual mode")
-        self.manual_mode_check.setChecked(True)
         com_status_frame_layout.addLayout(com_status_line_layout)
         com_status_frame_layout.addLayout(com_tracking_line_layout)
         com_status_frame_layout.addLayout(com_motor_line_layout)
-        com_status_frame_layout.addWidget(self.manual_mode_check)
         self.com_status_frame.setLayout(com_status_frame_layout)
         com_tab_layout.addWidget(self.com_status_frame)
 
@@ -514,7 +522,61 @@ class main(QWidget):
         self.btn_sht_start.clicked.connect(self.on_start_exposure)
         self.btn_sht_stop.clicked.connect(self.on_stop_exposure)
 
+        self.btn_mode.clicked.connect(self.on_mode_select)
+
+
+        #serial signals
+        self.serialMenager.status.connect(self.on_serial_status)
+
     # ===  ===
+
+    def on_mode_select(self):
+        sel = self.mode_combo.currentText()
+
+        if sel == "manual":
+            self.com_tracking_label.setText("INACTIVE")
+            self.com_tracking_label.setStyleSheet("color: red;")
+            self.com_motor_label.setText("DISABLED")
+            self.com_motor_label.setStyleSheet("color: red;")
+            self.mode = "m"
+        elif sel == "hold":
+            self.com_tracking_label.setText("INACTIVE")
+            self.com_tracking_label.setStyleSheet("color: red;")
+            self.com_motor_label.setText("ENABLED")
+            self.com_motor_label.setStyleSheet("color: green;")
+            self.mode = "h"
+        elif sel == "tracking":
+            self.com_tracking_label.setText("ACTIVE")
+            self.com_tracking_label.setStyleSheet("color: green;")
+            self.com_motor_label.setText("ENABLED")
+            self.com_motor_label.setStyleSheet("color: green;")
+            self.mode = "t"
+
+    @Slot(str)
+    def on_serial_status(self, msg):
+        if msg.startswith("Opened"):
+            self.btn_sht_start.setEnabled(True)
+            self.btn_sht_stop.setEnabled(True)
+            self.com_status_label.setText("OPEN")
+            self.com_status_label.setStyleSheet("color: green;")
+        
+        elif msg == "Closed":
+            self.com_status_label.setText("CLOSED")
+            self.com_status_label.setStyleSheet("color: red;")
+            
+            #przyciski w shutter disable
+            self.btn_sht_start.setEnabled(False)
+            self.btn_sht_stop.setEnabled(False)
+
+
+        elif msg.startswith("failed"):
+            self.com_status_label.setText("FAILED")
+            self.com_status_label.setStyleSheet("color: red;")
+            
+            #przyciski w shutter disable
+            self.btn_sht_start.setEnabled(False)
+            self.btn_sht_stop.setEnabled(False)
+
 
     def on_start_exposure(self):
         
@@ -610,22 +672,15 @@ class main(QWidget):
     def on_open(self):
         text = int(self.baudrate.text())
         self.serialMenager.open_port.emit(self.port,text)
-        self.com_status_label.setText("OPEN")
-        self.com_status_label.setStyleSheet("color: green;")
+
 
         #PRZYCISKI W SHUTTER ENABLE
-        self.btn_sht_start.setEnabled(True)
-        self.btn_sht_stop.setEnabled(True)
+
 
 
     def on_close(self):
         self.serialMenager.close_port.emit()
-        self.com_status_label.setText("CLOSED")
-        self.com_status_label.setStyleSheet("color: red;")
-        
-        #przyciski w shutter disable
-        self.btn_sht_start.setEnabled(False)
-        self.btn_sht_stop.setEnabled(False)
+
         
     def change_roi(self, value):
         self.roi_size = value
@@ -725,7 +780,7 @@ class main(QWidget):
         self.error_time.append(t)
         self.error_x_data.append(error_x)
         self.error_y_data.append(error_y)
-        self.serialMenager.send_error.emit(error_x, error_y)
+        self.serialMenager.send_error.emit(error_x, error_y, self.mode)
 
         # limit 20 s
         while self.error_time and t - self.error_time[0] > 20:

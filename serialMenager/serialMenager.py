@@ -6,7 +6,7 @@ class serialMenager(QObject):
     open_port = Signal(str, int)
     close_port = Signal()
     send_shutter = Signal(str)
-    send_error = Signal(float, float)
+    send_error = Signal(float, float, str)
     status = Signal(str)
 
     def __init__(self):
@@ -26,7 +26,7 @@ class serialMenager(QObject):
             self.status.emit(f"Opened {port}")
         except Exception as e:
             self.ser = None
-            self.status.emit(f"Open failed: {e}")
+            self.status.emit(f"failed: {e}")
 
     @Slot()
     def _close_port(self):
@@ -36,7 +36,7 @@ class serialMenager(QObject):
             except:
                 pass
             self.ser = None
-            self.status.emit("Port closed")
+            self.status.emit("Closed")
 
     def _write(self, data):
         if not self.ser or not self.ser.is_open:
@@ -51,6 +51,6 @@ class serialMenager(QObject):
     def _send_shutter(self, cmd):
         self._write(cmd)
 
-    @Slot(float, float)
-    def _send_error(self, a, b):
-        self._write(f"{a:.3f} {b:.3f}\n")
+    @Slot(float, float, str)
+    def _send_error(self, a, b, c):
+        self._write(f"{c} {a:.3f} {b:.3f}\n")
